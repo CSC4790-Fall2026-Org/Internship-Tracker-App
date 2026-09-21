@@ -1,18 +1,45 @@
 import { useState } from "react";
-import { applications, tasks, recentActivity, upcomingDeadlines, upcomingInterviews } from "../data/mockData";
+import { useData } from "../data/DataContext";
+import { daysUntil, toDate, todayISO } from "../data/dates";
 
 interface DashboardProps {
   onNavigate: (screen: string, id?: string) => void;
+  userName: string;
 }
 
-export default function Dashboard({ onNavigate }: DashboardProps) {
-  const [taskList, setTaskList] = useState(tasks);
+export default function Dashboard({ onNavigate, userName }: DashboardProps) {
+  const { applications, tasks: taskList, recentActivity, addTask, setTaskDone } = useData();
+  const [newTask, setNewTask] = useState<{ text: string; due: string; applicationId: string } | null>(null);
+  const [savingTask, setSavingTask] = useState(false);
 
+  const today = todayISO();
   const activeApps = applications.filter((a) => a.status !== "rejected").length;
-  const interviewCount = applications.filter((a) => a.status === "interviewing").length;
+  const upcomingDeadlines = applications
+    .filter((a) => a.deadline && a.deadline >= today && a.status !== "rejected" && a.status !== "offer")
+    .sort((a, b) => a.deadline.localeCompare(b.deadline))
+    .map((a) => ({ id: a.id, company: a.company, position: a.position, deadline: a.deadline, daysLeft: daysUntil(a.deadline) }));
+  const upcomingInterviews = applications
+    .flatMap((a) => a.interviewStages.filter((s) => !s.completed && s.date >= today).map((s) => ({ id: s.id, appId: a.id, company: a.company, position: a.position, stage: s.name, date: s.date })))
+    .sort((a, b) => a.date.localeCompare(b.date));
+  const deadlinesSoon = upcomingDeadlines.filter((d) => d.daysLeft <= 14);
+  const weekAgo = new Date(Date.now() - 7 * 86_400_000).toISOString().slice(0, 10);
+  const addedThisWeek = applications.filter((a) => a.appliedDate && a.appliedDate >= weekAgo).length;
 
-  const toggleTask = (id: string) => {
-    setTaskList((prev) => prev.map((t) => (t.id === id ? { ...t, done: !t.done } : t)));
+  const now = new Date();
+  const greeting = now.getHours() < 12 ? "Good morning" : now.getHours() < 18 ? "Good afternoon" : "Good evening";
+  const firstName = userName.split(" ")[0];
+
+  const saveTask = async () => {
+    if (!newTask?.text.trim()) return;
+    setSavingTask(true);
+    try {
+      await addTask({ text: newTask.text, due: newTask.due, applicationId: newTask.applicationId || null });
+      setNewTask(null);
+    } catch (e) {
+      alert(`Couldn't add task: ${(e as Error).message}`);
+    } finally {
+      setSavingTask(false);
+    }
   };
 
   const activityColor = (type: string) => {
@@ -28,10 +55,10 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
       <div className="mb-8 flex items-end justify-between">
         <div>
           <p style={{ fontFamily: "var(--font-body)", fontSize: "0.8125rem", color: "var(--muted-foreground)", marginBottom: "4px" }}>
-            Thursday, September 4, 2026
+            {now.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
           </p>
           <h1 style={{ fontFamily: "var(--font-heading)", fontSize: "1.625rem", fontWeight: 700, color: "var(--foreground)", letterSpacing: "-0.02em" }}>
-            Good morning, Jordan
+            {greeting}, {firstName}
           </h1>
         </div>
         <button
@@ -50,9 +77,9 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
       {/* Summary stats — flat, no icon boxes */}
       <div className="grid grid-cols-3 gap-4 mb-8">
         {[
-          { label: "Active Applications", value: activeApps, sub: "2 added this week", accent: "var(--primary)" },
-          { label: "Deadlines in 2 weeks", value: upcomingDeadlines.filter((d) => d.daysLeft <= 14).length, sub: "Meridian Health is next", accent: "#B45309" },
-          { label: "Upcoming Interviews", value: interviewCount, sub: "Acme Corp onsite — Sep 8", accent: "#6D28D9" },
+          { label: "Active Applications", value: activeApps, sub: `${addedThisWeek} applied this week`, accent: "var(--primary)" },
+          { label: "Deadlines in 2 weeks", value: deadlinesSoon.length, sub: deadlinesSoon.length ? `${deadlinesSoon[0].company} is next` : "Nothing due soon", accent: "#B45309" },
+          { label: "Upcoming Interviews", value: upcomingInterviews.length, sub: upcomingInterviews.length ? `${upcomingInterviews[0].company} — ${toDate(upcomingInterviews[0].date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : "None scheduled", accent: "#6D28D9" },
         ].map((card) => (
           <div
             key={card.label}
@@ -88,7 +115,12 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
             </button>
           </div>
           <div className="flex flex-col gap-2">
-            {upcomingDeadlines.map((item) => (
+            {upcomingDeadlines.length === 0 && (
+              <p style={{ fontFamily: "var(--font-body)", fontSize: "0.8125rem", color: "var(--muted-foreground)" }}>
+                No upcoming deadlines.
+              </p>
+            )}
+            {upcomingDeadlines.slice(0, 5).map((item) => (
               <div
                 key={item.id}
                 style={{ display: "flex", alignItems: "center", padding: "10px 12px", borderRadius: "6px", background: "var(--muted)", cursor: "pointer", transition: "background 0.12s" }}
@@ -106,7 +138,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
                 </div>
                 <div className="flex items-center gap-2 shrink-0 ml-3">
                   <span style={{ fontFamily: "var(--font-mono-base)", fontSize: "0.6875rem", color: "var(--muted-foreground)" }}>
-                    {new Date(item.deadline).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                    {toDate(item.deadline).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                   </span>
                   <span
                     style={{
@@ -136,25 +168,25 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
                 No interviews scheduled.
               </p>
             ) : (
-              upcomingInterviews.map((iv) => (
+              upcomingInterviews.slice(0, 3).map((iv) => (
                 <div
                   key={iv.id}
-                  style={{ borderRadius: "6px", background: "var(--muted)", border: "1px solid var(--border)", borderLeft: "3px solid var(--primary)", padding: "14px 16px", cursor: "pointer" }}
-                  onClick={() => onNavigate("detail", "1")}
+                  style={{ borderRadius: "6px", background: "var(--muted)", border: "1px solid var(--border)", borderLeft: "3px solid var(--primary)", padding: "14px 16px", cursor: "pointer", marginBottom: "8px" }}
+                  onClick={() => onNavigate("detail", iv.appId)}
                 >
                   <div className="flex items-center justify-between mb-1">
                     <p style={{ fontFamily: "var(--font-body)", fontWeight: 600, fontSize: "0.875rem", color: "var(--foreground)" }}>
                       {iv.company}
                     </p>
                     <span style={{ fontFamily: "var(--font-mono-base)", fontSize: "0.6875rem", fontWeight: 600, color: "var(--primary)" }}>
-                      {new Date(iv.date).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
+                      {toDate(iv.date).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
                     </span>
                   </div>
                   <p style={{ fontFamily: "var(--font-body)", fontSize: "0.8125rem", color: "var(--muted-foreground)", marginBottom: "6px" }}>
                     {iv.stage}
                   </p>
                   <p style={{ fontFamily: "var(--font-mono-base)", fontSize: "0.6875rem", color: "var(--muted-foreground)" }}>
-                    {iv.time}
+                    {iv.position}
                   </p>
                 </div>
               ))
@@ -167,6 +199,11 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
               Recent Activity
             </h2>
             <div className="flex flex-col">
+              {recentActivity.length === 0 && (
+                <p style={{ fontFamily: "var(--font-body)", fontSize: "0.8125rem", color: "var(--muted-foreground)" }}>
+                  No activity yet. Add your first application to get started.
+                </p>
+              )}
               {recentActivity.map((item, i) => (
                 <div
                   key={item.id}
@@ -226,7 +263,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
                   <input
                     type="checkbox"
                     checked={task.done}
-                    onChange={() => toggleTask(task.id)}
+                    onChange={() => setTaskDone(task.id, !task.done).catch((e) => alert(`Couldn't update task: ${e.message}`))}
                     style={{ accentColor: "var(--primary)", width: "14px", height: "14px", cursor: "pointer" }}
                   />
                 </div>
@@ -234,20 +271,68 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
                   <p style={{ fontFamily: "var(--font-body)", fontSize: "0.8rem", color: "var(--foreground)", textDecoration: task.done ? "line-through" : "none", lineHeight: 1.45 }}>
                     {task.text}
                   </p>
-                  <div className="flex items-center gap-2 mt-1">
-                    <span style={{ fontFamily: "var(--font-body)", fontSize: "0.6875rem", color: "var(--muted-foreground)" }}>
-                      {task.company}
-                    </span>
-                    <span style={{ color: "var(--border)", fontSize: "0.75rem" }}>·</span>
-                    <span style={{ fontFamily: "var(--font-mono-base)", fontSize: "0.6375rem", color: "var(--muted-foreground)" }}>
-                      Due {new Date(task.due).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                    </span>
-                  </div>
+                  {(task.company || task.due) && (
+                    <div className="flex items-center gap-2 mt-1">
+                      {task.company && (
+                        <span style={{ fontFamily: "var(--font-body)", fontSize: "0.6875rem", color: "var(--muted-foreground)" }}>
+                          {task.company}
+                        </span>
+                      )}
+                      {task.company && task.due && <span style={{ color: "var(--border)", fontSize: "0.75rem" }}>·</span>}
+                      {task.due && (
+                        <span style={{ fontFamily: "var(--font-mono-base)", fontSize: "0.6375rem", color: "var(--muted-foreground)" }}>
+                          Due {toDate(task.due).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
               </label>
             ))}
           </div>
+          {taskList.length === 0 && !newTask && (
+            <p style={{ fontFamily: "var(--font-body)", fontSize: "0.8125rem", color: "var(--muted-foreground)" }}>
+              No tasks yet.
+            </p>
+          )}
+          {newTask ? (
+            <div style={{ marginTop: "12px", display: "flex", flexDirection: "column", gap: "6px" }}>
+              <input
+                autoFocus
+                placeholder="What needs doing?"
+                value={newTask.text}
+                onChange={(e) => setNewTask({ ...newTask, text: e.target.value })}
+                onKeyDown={(e) => { if (e.key === "Enter") saveTask(); if (e.key === "Escape") setNewTask(null); }}
+                style={taskInputStyle}
+              />
+              <div style={{ display: "flex", gap: "6px" }}>
+                <select value={newTask.applicationId} onChange={(e) => setNewTask({ ...newTask, applicationId: e.target.value })} style={{ ...taskInputStyle, flex: 1, minWidth: 0 }}>
+                  <option value="">No application</option>
+                  {applications.map((a) => (
+                    <option key={a.id} value={a.id}>{a.company}</option>
+                  ))}
+                </select>
+                <input type="date" value={newTask.due} onChange={(e) => setNewTask({ ...newTask, due: e.target.value })} style={{ ...taskInputStyle, width: "auto" }} />
+              </div>
+              <div style={{ display: "flex", gap: "6px" }}>
+                <button
+                  onClick={saveTask}
+                  disabled={savingTask || !newTask.text.trim()}
+                  style={{ flex: 1, padding: "7px", borderRadius: "6px", border: "none", background: "var(--primary)", color: "white", fontFamily: "var(--font-body)", fontSize: "0.8rem", fontWeight: 600, cursor: "pointer", opacity: savingTask || !newTask.text.trim() ? 0.6 : 1 }}
+                >
+                  {savingTask ? "Saving…" : "Add task"}
+                </button>
+                <button
+                  onClick={() => setNewTask(null)}
+                  style={{ padding: "7px 12px", borderRadius: "6px", border: "1px solid var(--border)", background: "var(--muted)", color: "var(--foreground)", fontFamily: "var(--font-body)", fontSize: "0.8rem", cursor: "pointer" }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
           <button
+            onClick={() => setNewTask({ text: "", due: "", applicationId: "" })}
             style={{
               marginTop: "12px", width: "100%", padding: "8px",
               borderRadius: "6px", border: "1.5px dashed var(--border)",
@@ -259,8 +344,15 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
           >
             + Add task
           </button>
+          )}
         </div>
       </div>
     </div>
   );
 }
+
+const taskInputStyle: React.CSSProperties = {
+  width: "100%", padding: "7px 10px", boxSizing: "border-box",
+  fontFamily: "var(--font-body)", fontSize: "0.8rem", color: "var(--foreground)",
+  background: "var(--muted)", border: "1px solid var(--border)", borderRadius: "6px", outline: "none",
+};

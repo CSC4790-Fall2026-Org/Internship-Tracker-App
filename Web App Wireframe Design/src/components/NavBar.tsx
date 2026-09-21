@@ -2,6 +2,7 @@ interface NavBarProps {
   activeScreen: string;
   onNavigate: (screen: string) => void;
   onLogout: () => void;
+  userName: string;
 }
 
 const navItems = [
@@ -13,7 +14,9 @@ const navItems = [
   { id: "ai-coach", label: "AI Coach" },
 ];
 
-export default function NavBar({ activeScreen, onNavigate, onLogout }: NavBarProps) {
+export default function NavBar({ activeScreen, onNavigate, onLogout, userName }: NavBarProps) {
+  const initials = userName.split(/\s+/).filter(Boolean).map((w) => w[0]).slice(0, 2).join("").toUpperCase();
+
   return (
     <header
       style={{
@@ -144,7 +147,7 @@ export default function NavBar({ activeScreen, onNavigate, onLogout }: NavBarPro
           <div style={{ position: "relative" }}>
             <button
               onClick={onLogout}
-              title="Sign out"
+              title={`Signed in as ${userName} — click to sign out`}
               style={{
                 width: "32px",
                 height: "32px",
@@ -164,7 +167,7 @@ export default function NavBar({ activeScreen, onNavigate, onLogout }: NavBarPro
               onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = "0.8")}
               onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = "1")}
             >
-              JD
+              {initials}
             </button>
           </div>
         </div>

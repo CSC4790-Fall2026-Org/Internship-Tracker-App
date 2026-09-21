@@ -1,11 +1,15 @@
 import { useState } from "react";
-import { AppStatus } from "../data/mockData";
+import type { AppStatus } from "../data/types";
+import { useData } from "../data/DataContext";
 
 interface AddApplicationProps {
   onNavigate: (screen: string, id?: string) => void;
 }
 
 export default function AddApplication({ onNavigate }: AddApplicationProps) {
+  const { addApplication } = useData();
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState({
     company: "",
     position: "",
@@ -19,6 +23,24 @@ export default function AddApplication({ onNavigate }: AddApplicationProps) {
 
   const handleChange = (field: string, value: string) => {
     setForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const canSave = form.company.trim() !== "" && form.position.trim() !== "";
+
+  const handleSave = async () => {
+    if (!canSave) {
+      setError("Company and position are required.");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      const id = await addApplication(form);
+      onNavigate("detail", id);
+    } catch (e) {
+      setError((e as Error).message);
+      setSaving(false);
+    }
   };
 
   const fieldStyle = {
@@ -301,6 +323,12 @@ export default function AddApplication({ onNavigate }: AddApplicationProps) {
             />
           </div>
 
+          {error && (
+            <p role="alert" style={{ fontFamily: "var(--font-body)", fontSize: "0.8rem", color: "#B91C1C", background: "#FEE2E2", border: "1px solid #FCA5A5", borderRadius: "8px", padding: "8px 12px", marginBottom: "12px" }}>
+              {error}
+            </p>
+          )}
+
           {/* Actions */}
           <div className="flex items-center gap-3">
             <button
@@ -314,14 +342,14 @@ export default function AddApplication({ onNavigate }: AddApplicationProps) {
                 fontFamily: "var(--font-body)",
                 fontWeight: 600,
                 fontSize: "0.875rem",
-                cursor: "pointer",
+                cursor: saving ? "not-allowed" : "pointer",
+                opacity: saving || !canSave ? 0.6 : 1,
                 transition: "opacity 0.15s",
               }}
-              onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = "0.88")}
-              onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = "1")}
-              onClick={() => onNavigate("applications")}
+              disabled={saving}
+              onClick={handleSave}
             >
-              Save Application
+              {saving ? "Saving…" : "Save Application"}
             </button>
             <button
               onClick={() => onNavigate("applications")}

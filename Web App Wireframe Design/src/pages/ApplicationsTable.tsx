@@ -1,5 +1,7 @@
 import { useState, useMemo } from "react";
-import { applications, AppStatus } from "../data/mockData";
+import type { AppStatus } from "../data/types";
+import { useData } from "../data/DataContext";
+import { toDate } from "../data/dates";
 
 const STATUS_META: Record<AppStatus, { label: string; color: string; bg: string }> = {
   wishlist:     { label: "Wishlist",      color: "#64748B", bg: "#F1F5F9" },
@@ -16,6 +18,8 @@ interface ApplicationsTableProps {
 }
 
 export default function ApplicationsTable({ onNavigate }: ApplicationsTableProps) {
+  const { applications, deleteApplications } = useData();
+  const [deleting, setDeleting] = useState(false);
   const [sortField, setSortField] = useState<SortField>("deadline");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [filterStatus, setFilterStatus] = useState<AppStatus | "all">("all");
@@ -45,7 +49,21 @@ export default function ApplicationsTable({ onNavigate }: ApplicationsTableProps
       return sortDir === "asc" ? cmp : -cmp;
     });
     return rows;
-  }, [sortField, sortDir, filterStatus, search]);
+  }, [applications, sortField, sortDir, filterStatus, search]);
+
+  const handleDelete = async () => {
+    const n = selectedIds.size;
+    if (!confirm(`Delete ${n} application${n === 1 ? "" : "s"}? This also removes their interview stages and contacts.`)) return;
+    setDeleting(true);
+    try {
+      await deleteApplications([...selectedIds]);
+      setSelectedIds(new Set());
+    } catch (e) {
+      alert(`Couldn't delete: ${(e as Error).message}`);
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const allSelected = filtered.length > 0 && filtered.every((r) => selectedIds.has(r.id));
   const toggleAll = () => {
@@ -109,12 +127,14 @@ export default function ApplicationsTable({ onNavigate }: ApplicationsTableProps
         <div className="flex items-center gap-3">
           {selectedIds.size > 0 && (
             <button
-              style={{ background: "#FEE2E2", color: "#DC2626", border: "1px solid #FCA5A544", borderRadius: "7px", padding: "7px 12px", fontFamily: "var(--font-body)", fontSize: "0.8rem", fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", gap: "5px" }}
+              onClick={handleDelete}
+              disabled={deleting}
+              style={{ opacity: deleting ? 0.6 : 1, background: "#FEE2E2", color: "#DC2626", border: "1px solid #FCA5A544", borderRadius: "7px", padding: "7px 12px", fontFamily: "var(--font-body)", fontSize: "0.8rem", fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", gap: "5px" }}
             >
               <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
                 <path d="M2 3h8M5 3V2h2v1M4 3v7h4V3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
-              Delete {selectedIds.size}
+              {deleting ? "Deleting…" : `Delete ${selectedIds.size}`}
             </button>
           )}
           <button
@@ -323,14 +343,14 @@ export default function ApplicationsTable({ onNavigate }: ApplicationsTableProps
                     {/* Applied */}
                     <td style={{ padding: "11px 14px" }}>
                       <span style={{ fontFamily: "var(--font-mono-base)", fontSize: "0.8rem", color: "var(--muted-foreground)" }}>
-                        {app.appliedDate ? new Date(app.appliedDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" }) : "—"}
+                        {app.appliedDate ? toDate(app.appliedDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" }) : "—"}
                       </span>
                     </td>
 
                     {/* Deadline */}
                     <td style={{ padding: "11px 14px" }}>
                       <span style={{ fontFamily: "var(--font-mono-base)", fontSize: "0.8rem", color: "var(--muted-foreground)" }}>
-                        {app.deadline ? new Date(app.deadline).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" }) : "—"}
+                        {app.deadline ? toDate(app.deadline).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" }) : "—"}
                       </span>
                     </td>
 

@@ -1,21 +1,53 @@
 import { useState } from "react";
+import { supabase } from "../lib/supabase";
 
-interface LoginProps {
-  onLogin: () => void;
-}
-
-export default function Login({ onLogin }: LoginProps) {
+// On success, App picks up the new session via supabase.auth.onAuthStateChange.
+export default function Login() {
   const [tab, setTab] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const switchTab = (t: "signin" | "signup") => {
+    setTab(t);
+    setError(null);
+    setNotice(null);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setTimeout(() => { setLoading(false); onLogin(); }, 900);
+    setError(null);
+    setNotice(null);
+    if (tab === "signin") {
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) setError(error.message);
+    } else {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: { data: { full_name: name.trim() }, emailRedirectTo: window.location.origin },
+      });
+      if (error) setError(error.message);
+      else if (!data.session) setNotice("Check your email for a confirmation link, then sign in.");
+    }
+    setLoading(false);
+  };
+
+  const handleForgotPassword = async () => {
+    setError(null);
+    setNotice(null);
+    if (!email) {
+      setError("Enter your email address first.");
+      return;
+    }
+    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin });
+    if (error) setError(error.message);
+    else setNotice("If an account exists for that email, a password reset link is on its way.");
   };
 
   const inputStyle: React.CSSProperties = {
@@ -116,7 +148,7 @@ export default function Login({ onLogin }: LoginProps) {
           {(["signin", "signup"] as const).map((t) => (
             <button
               key={t}
-              onClick={() => setTab(t)}
+              onClick={() => switchTab(t)}
               style={{
                 flex: 1, padding: "8px", borderRadius: "6px", border: "none",
                 background: tab === t ? "var(--card)" : "transparent",
@@ -146,7 +178,7 @@ export default function Login({ onLogin }: LoginProps) {
           style={{ width: "100%", padding: "10px", borderRadius: "7px", border: "1px solid var(--border)", background: "var(--muted)", fontFamily: "var(--font-body)", fontSize: "0.875rem", fontWeight: 500, color: "var(--foreground)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", marginBottom: "20px", transition: "background 0.12s" }}
           onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.background = "var(--border)")}
           onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.background = "var(--muted)")}
-          onClick={onLogin}
+          onClick={() => { setNotice(null); setError("Google sign-in isn't set up yet. Use email and password for now."); }}
         >
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
             <path d="M15.68 8.18c0-.57-.05-1.11-.14-1.64H8v3.1h4.3a3.68 3.68 0 0 1-1.6 2.42v2h2.58c1.51-1.39 2.4-3.44 2.4-5.88z" fill="#4285F4"/>
@@ -186,7 +218,7 @@ export default function Login({ onLogin }: LoginProps) {
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "5px" }}>
               <label style={{ fontFamily: "var(--font-body)", fontSize: "0.8rem", fontWeight: 500, color: "var(--foreground)" }}>Password</label>
               {tab === "signin" && (
-                <button type="button" style={{ fontFamily: "var(--font-body)", fontSize: "0.75rem", color: "var(--primary)", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+                <button type="button" onClick={handleForgotPassword} style={{ fontFamily: "var(--font-body)", fontSize: "0.75rem", color: "var(--primary)", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
                   Forgot password?
                 </button>
               )}
@@ -197,7 +229,7 @@ export default function Login({ onLogin }: LoginProps) {
                 placeholder={tab === "signup" ? "Minimum 8 characters" : "••••••••"}
                 value={password} onChange={(e) => setPassword(e.target.value)}
                 style={{ ...inputStyle, paddingRight: "40px" }}
-                onFocus={onFocus} onBlur={onBlur} required
+                onFocus={onFocus} onBlur={onBlur} required minLength={tab === "signup" ? 8 : undefined}
               />
               <button
                 type="button" onClick={() => setShowPassword((v) => !v)}
@@ -222,6 +254,17 @@ export default function Login({ onLogin }: LoginProps) {
                 <span style={{ color: "var(--primary)", textDecoration: "underline" }}>Privacy Policy</span>
               </label>
             </div>
+          )}
+
+          {error && (
+            <p role="alert" style={{ fontFamily: "var(--font-body)", fontSize: "0.8rem", color: "#B91C1C", background: "#FEE2E2", border: "1px solid #FCA5A5", borderRadius: "7px", padding: "8px 12px" }}>
+              {error}
+            </p>
+          )}
+          {notice && (
+            <p style={{ fontFamily: "var(--font-body)", fontSize: "0.8rem", color: "#166534", background: "#DCFCE7", border: "1px solid #86EFAC", borderRadius: "7px", padding: "8px 12px" }}>
+              {notice}
+            </p>
           )}
 
           <button
@@ -255,7 +298,7 @@ export default function Login({ onLogin }: LoginProps) {
         <p style={{ fontFamily: "var(--font-body)", fontSize: "0.8rem", color: "var(--muted-foreground)", textAlign: "center", marginTop: "20px" }}>
           {tab === "signin" ? "Don't have an account? " : "Already have an account? "}
           <button
-            onClick={() => setTab(tab === "signin" ? "signup" : "signin")}
+            onClick={() => switchTab(tab === "signin" ? "signup" : "signin")}
             style={{ color: "var(--primary)", background: "none", border: "none", cursor: "pointer", fontFamily: "var(--font-body)", fontSize: "0.8rem", fontWeight: 600, padding: 0 }}
           >
             {tab === "signin" ? "Sign up free" : "Sign in"}

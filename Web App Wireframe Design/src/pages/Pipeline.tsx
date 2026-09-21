@@ -1,5 +1,7 @@
 import { useState } from "react";
-import { applications, Application, AppStatus } from "../data/mockData";
+import type { Application, AppStatus } from "../data/types";
+import { useData } from "../data/DataContext";
+import { toDate } from "../data/dates";
 import SankeyDiagram from "../components/SankeyDiagram";
 
 const STATUS_COLUMNS: { id: AppStatus; label: string; color: string; bg: string }[] = [
@@ -30,12 +32,12 @@ function LogoPlaceholder({ initials, color, size = 28 }: { initials: string; col
   );
 }
 
-function PipelineVisualization() {
+function PipelineVisualization({ applications }: { applications: Application[] }) {
   const total = applications.length;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
       {/* Sankey */}
-      <SankeyDiagram />
+      <SankeyDiagram applications={applications} />
 
       {/* Conversion stats */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px" }}>
@@ -57,6 +59,7 @@ function PipelineVisualization() {
 
 export default function Pipeline({ onNavigate }: PipelineProps) {
   const [view, setView] = useState<"board" | "visualization">("board");
+  const { applications } = useData();
 
   return (
     <div className="max-w-[1400px] mx-auto px-6 py-8">
@@ -143,7 +146,7 @@ export default function Pipeline({ onNavigate }: PipelineProps) {
         </div>
       )}
 
-      {view === "visualization" && <PipelineVisualization />}
+      {view === "visualization" && <PipelineVisualization applications={applications} />}
     </div>
   );
 }
@@ -170,7 +173,7 @@ function KanbanCard({ app, colColor, onNavigate }: { app: Application; colColor:
             <path d="M5.5 3v2.5l1.5 1.5" stroke="var(--muted-foreground)" strokeWidth="1.2" strokeLinecap="round" />
           </svg>
           <span style={{ fontFamily: "var(--font-mono-base)", fontSize: "0.6625rem", color: "var(--muted-foreground)" }}>
-            {new Date(app.deadline).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+            {toDate(app.deadline).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
           </span>
           {app.salary && (
             <>

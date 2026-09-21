@@ -1,16 +1,7 @@
 import { useState } from "react";
-import { applications } from "../data/mockData";
+import type { Application } from "../data/types";
 
 // ── Data model ────────────────────────────────────────────────────────────────
-
-const total = applications.length;
-const applied = applications.filter((a) => ["applied", "interviewing", "offer", "rejected"].includes(a.status)).length;
-const noResponse = applications.filter((a) => a.status === "wishlist").length;
-const interviewed = applications.filter((a) => ["interviewing", "offer"].includes(a.status)).length;
-const directRejected = applications.filter((a) => a.status === "rejected").length;
-const pendingReview = applications.filter((a) => a.status === "applied").length;
-const offers = applications.filter((a) => a.status === "offer").length;
-const noOffer = applications.filter((a) => a.status === "interviewing").length;
 
 interface SNode {
   id: string;
@@ -26,26 +17,40 @@ interface SLink {
   value: number;
 }
 
-const NODES: SNode[] = [
-  { id: "total",        label: "Applications",  count: total,          col: 0, color: "#2563EB" },
-  { id: "screening",    label: "Screening",      count: applied,        col: 1, color: "#7C3AED" },
-  { id: "no_response",  label: "No Response",    count: noResponse,     col: 1, color: "#94A3B8" },
-  { id: "interviewing", label: "Interviewing",   count: interviewed,    col: 2, color: "#D97706" },
-  { id: "rejected",     label: "Rejected",       count: directRejected, col: 2, color: "#EF4444" },
-  { id: "pending",      label: "Pending",        count: pendingReview,  col: 2, color: "#64748B" },
-  { id: "offer",        label: "Offers",         count: offers,         col: 3, color: "#059669" },
-  { id: "no_offer",     label: "No Offer",       count: noOffer,        col: 3, color: "#DC2626" },
-];
+function buildModel(applications: Application[]) {
+  const count = (statuses: string[]) => applications.filter((a) => statuses.includes(a.status)).length;
+  const total = applications.length;
+  const applied = count(["applied", "interviewing", "offer", "rejected"]);
+  const noResponse = count(["wishlist"]);
+  const interviewed = count(["interviewing", "offer"]);
+  const directRejected = count(["rejected"]);
+  const pendingReview = count(["applied"]);
+  const offers = count(["offer"]);
+  const noOffer = count(["interviewing"]);
 
-const LINKS: SLink[] = [
-  { source: "total",        target: "screening",    value: applied       },
-  { source: "total",        target: "no_response",  value: noResponse    },
-  { source: "screening",    target: "interviewing", value: interviewed   },
-  { source: "screening",    target: "rejected",     value: directRejected},
-  { source: "screening",    target: "pending",      value: pendingReview },
-  { source: "interviewing", target: "offer",        value: offers        },
-  { source: "interviewing", target: "no_offer",     value: noOffer       },
-];
+  const nodes: SNode[] = [
+    { id: "total",        label: "Applications",  count: total,          col: 0, color: "#2563EB" },
+    { id: "screening",    label: "Screening",      count: applied,        col: 1, color: "#7C3AED" },
+    { id: "no_response",  label: "No Response",    count: noResponse,     col: 1, color: "#94A3B8" },
+    { id: "interviewing", label: "Interviewing",   count: interviewed,    col: 2, color: "#D97706" },
+    { id: "rejected",     label: "Rejected",       count: directRejected, col: 2, color: "#EF4444" },
+    { id: "pending",      label: "Pending",        count: pendingReview,  col: 2, color: "#64748B" },
+    { id: "offer",        label: "Offers",         count: offers,         col: 3, color: "#059669" },
+    { id: "no_offer",     label: "No Offer",       count: noOffer,        col: 3, color: "#DC2626" },
+  ];
+
+  const links: SLink[] = [
+    { source: "total",        target: "screening",    value: applied       },
+    { source: "total",        target: "no_response",  value: noResponse    },
+    { source: "screening",    target: "interviewing", value: interviewed   },
+    { source: "screening",    target: "rejected",     value: directRejected},
+    { source: "screening",    target: "pending",      value: pendingReview },
+    { source: "interviewing", target: "offer",        value: offers        },
+    { source: "interviewing", target: "no_offer",     value: noOffer       },
+  ];
+
+  return { total, nodes, links };
+}
 
 // ── Layout ────────────────────────────────────────────────────────────────────
 
@@ -81,6 +86,7 @@ function layoutNodes(nodes: SNode[]) {
 
 // Track how much of each node's height has been "used" for outgoing/incoming flows
 function buildLinkPaths(
+  nodes: SNode[],
   links: SLink[],
   layout: ReturnType<typeof layoutNodes>
 ) {
@@ -99,8 +105,8 @@ function buildLinkPaths(
     const tgt = layout[link.target];
     if (!src || !tgt || link.value === 0) return null;
 
-    const srcTotal = NODES.find((n) => n.id === link.source)!.count;
-    const tgtTotal = NODES.find((n) => n.id === link.target)!.count;
+    const srcTotal = nodes.find((n) => n.id === link.source)!.count;
+    const tgtTotal = nodes.find((n) => n.id === link.target)!.count;
 
     const linkH_src = (link.value / srcTotal) * src.h;
     const linkH_tgt = (link.value / tgtTotal) * tgt.h;
@@ -125,7 +131,7 @@ function buildLinkPaths(
       Z
     `;
 
-    const srcNode = NODES.find((n) => n.id === link.source)!;
+    const srcNode = nodes.find((n) => n.id === link.source)!;
 
     return { path, color: srcNode.color, source: link.source, target: link.target, value: link.value };
   }).filter(Boolean);
@@ -133,12 +139,13 @@ function buildLinkPaths(
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export default function SankeyDiagram() {
+export default function SankeyDiagram({ applications }: { applications: Application[] }) {
   const [hoveredLink, setHoveredLink] = useState<string | null>(null);
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
 
-  const layout = layoutNodes(NODES);
-  const linkPaths = buildLinkPaths(LINKS, layout);
+  const { total, nodes, links } = buildModel(applications);
+  const layout = layoutNodes(nodes);
+  const linkPaths = buildLinkPaths(nodes, links, layout);
 
   return (
     <div
@@ -185,7 +192,7 @@ export default function SankeyDiagram() {
         })}
 
         {/* Node rectangles + labels */}
-        {NODES.map((node) => {
+        {nodes.map((node) => {
           const n = layout[node.id];
           if (!n || n.h === 0) return null;
           const isHov = hoveredNode === node.id;
@@ -279,7 +286,7 @@ export default function SankeyDiagram() {
 
       {/* Legend */}
       <div style={{ display: "flex", flexWrap: "wrap", gap: "12px", marginTop: "16px", paddingTop: "14px", borderTop: "1px solid var(--border)" }}>
-        {NODES.filter((n) => n.id !== "total").map((node) => (
+        {nodes.filter((n) => n.id !== "total").map((node) => (
           <div key={node.id} style={{ display: "flex", alignItems: "center", gap: "5px" }}>
             <span style={{ width: "8px", height: "8px", borderRadius: "2px", background: node.color, display: "inline-block", flexShrink: 0 }} />
             <span style={{ fontFamily: "var(--font-body)", fontSize: "0.75rem", color: "var(--muted-foreground)" }}>

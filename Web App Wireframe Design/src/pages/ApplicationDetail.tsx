@@ -1,5 +1,7 @@
 import { useState } from "react";
-import { applications, AppStatus } from "../data/mockData";
+import type { AppStatus } from "../data/types";
+import { useData } from "../data/DataContext";
+import { toDate } from "../data/dates";
 
 const STATUS_OPTIONS: { id: AppStatus; label: string; color: string; bg: string }[] = [
   { id: "wishlist", label: "Wishlist", color: "#64748B", bg: "#F1F5F9" },
@@ -15,11 +17,41 @@ interface ApplicationDetailProps {
 }
 
 export default function ApplicationDetail({ appId, onNavigate }: ApplicationDetailProps) {
-  const app = applications.find((a) => a.id === appId) || applications[0];
-  const [status, setStatus] = useState<AppStatus>(app.status);
+  const { applications, updateApplication, addInterviewStage, setStageCompleted, addContact } = useData();
+  const app = applications.find((a) => a.id === appId);
   const [activeTab, setActiveTab] = useState<"overview" | "interviews" | "contacts">("overview");
+  const [newStage, setNewStage] = useState<{ name: string; date: string; notes: string } | null>(null);
+  const [newContact, setNewContact] = useState<{ name: string; role: string; email: string } | null>(null);
+  const [saving, setSaving] = useState(false);
 
+  if (!app) {
+    return (
+      <div className="max-w-[1400px] mx-auto px-6 py-8">
+        <p style={{ fontFamily: "var(--font-body)", fontSize: "0.875rem", color: "var(--muted-foreground)", marginBottom: "12px" }}>
+          This application doesn't exist or was deleted.
+        </p>
+        <button onClick={() => onNavigate("applications")} style={{ fontFamily: "var(--font-body)", fontSize: "0.8125rem", color: "var(--primary)", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+          ← Back to Applications
+        </button>
+      </div>
+    );
+  }
+
+  const status = app.status;
   const statusOpt = STATUS_OPTIONS.find((s) => s.id === status)!;
+
+  // Runs a save and reports failures; the data layer reloads on success.
+  const save = async (op: () => Promise<void>, onDone?: () => void) => {
+    setSaving(true);
+    try {
+      await op();
+      onDone?.();
+    } catch (e) {
+      alert(`Couldn't save: ${(e as Error).message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <div className="max-w-[1400px] mx-auto px-6 py-8">
@@ -103,7 +135,7 @@ export default function ApplicationDetail({ appId, onNavigate }: ApplicationDeta
                 <div style={{ position: "relative" }}>
                   <select
                     value={status}
-                    onChange={(e) => setStatus(e.target.value as AppStatus)}
+                    onChange={(e) => save(() => updateApplication(app.id, { status: e.target.value as AppStatus }))}
                     style={{
                       fontFamily: "var(--font-body)",
                       fontWeight: 600,
@@ -160,8 +192,8 @@ export default function ApplicationDetail({ appId, onNavigate }: ApplicationDeta
             {/* Meta row */}
             <div className="flex flex-wrap items-center gap-4 mt-4">
               {[
-                { icon: "M3 5h6M3 8h4", label: "Applied", value: app.appliedDate ? new Date(app.appliedDate).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : "Not yet applied" },
-                { icon: "M6 2a4 4 0 1 0 0 8", label: "Deadline", value: app.deadline ? new Date(app.deadline).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : "No deadline" },
+                { icon: "M3 5h6M3 8h4", label: "Applied", value: app.appliedDate ? toDate(app.appliedDate).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : "Not yet applied" },
+                { icon: "M6 2a4 4 0 1 0 0 8", label: "Deadline", value: app.deadline ? toDate(app.deadline).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : "No deadline" },
                 { icon: "M2 6h8M7 3l3 3-3 3", label: "Salary", value: app.salary || "Not listed" },
               ].map((m) => (
                 <div key={m.label} className="flex items-center gap-1.5">
@@ -250,7 +282,10 @@ export default function ApplicationDetail({ appId, onNavigate }: ApplicationDeta
                   Notes
                 </h3>
                 <textarea
+                  key={app.id}
                   defaultValue={app.notes}
+                  placeholder="Add notes…"
+                  onBlur={(e) => { if (e.target.value !== app.notes) save(() => updateApplication(app.id, { notes: e.target.value })); }}
                   style={{
                     width: "100%",
                     minHeight: "120px",
@@ -332,9 +367,11 @@ export default function ApplicationDetail({ appId, onNavigate }: ApplicationDeta
                               <p style={{ fontFamily: "var(--font-body)", fontWeight: 600, fontSize: "0.8375rem", color: "var(--foreground)" }}>
                                 {stage.name}
                               </p>
-                              <span style={{ fontFamily: "var(--font-mono-base)", fontSize: "0.6875rem", color: "var(--muted-foreground)" }}>
-                                {new Date(stage.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                              </span>
+                              {stage.date && (
+                                <span style={{ fontFamily: "var(--font-mono-base)", fontSize: "0.6875rem", color: "var(--muted-foreground)" }}>
+                                  {toDate(stage.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                                </span>
+                              )}
                             </div>
                             {stage.notes && (
                               <p style={{ fontFamily: "var(--font-body)", fontSize: "0.8rem", color: "var(--muted-foreground)", marginTop: "2px", lineHeight: 1.5 }}>
@@ -385,7 +422,7 @@ export default function ApplicationDetail({ appId, onNavigate }: ApplicationDeta
                             borderRadius: "5px",
                           }}
                         >
-                          {new Date(item.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                          {toDate(item.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                         </span>
                       </div>
                     ))}
@@ -457,6 +494,7 @@ export default function ApplicationDetail({ appId, onNavigate }: ApplicationDeta
                 Interview Stages
               </h3>
               <button
+                onClick={() => setNewStage({ name: "", date: "", notes: "" })}
                 style={{
                   background: "var(--muted)",
                   border: "1px solid var(--border)",
@@ -477,6 +515,19 @@ export default function ApplicationDetail({ appId, onNavigate }: ApplicationDeta
                 Add Stage
               </button>
             </div>
+
+            {newStage && (
+              <InlineForm
+                saving={saving}
+                canSave={newStage.name.trim() !== ""}
+                onCancel={() => setNewStage(null)}
+                onSave={() => save(() => addInterviewStage(app.id, newStage), () => setNewStage(null))}
+              >
+                <input autoFocus placeholder="Stage name (e.g. Technical Screen)" value={newStage.name} onChange={(e) => setNewStage({ ...newStage, name: e.target.value })} style={{ ...inlineInputStyle, flex: 2 }} />
+                <input type="date" value={newStage.date} onChange={(e) => setNewStage({ ...newStage, date: e.target.value })} style={{ ...inlineInputStyle, flex: 1 }} />
+                <input placeholder="Notes (optional)" value={newStage.notes} onChange={(e) => setNewStage({ ...newStage, notes: e.target.value })} style={{ ...inlineInputStyle, flex: 3 }} />
+              </InlineForm>
+            )}
 
             {app.interviewStages.length === 0 ? (
               <div
@@ -508,7 +559,12 @@ export default function ApplicationDetail({ appId, onNavigate }: ApplicationDeta
                   {app.interviewStages.map((stage, i) => (
                     <div key={stage.id} className="flex gap-4" style={{ paddingLeft: "0" }}>
                       <div
+                        role="checkbox"
+                        aria-checked={stage.completed}
+                        title={stage.completed ? "Mark as upcoming" : "Mark as completed"}
+                        onClick={() => save(() => setStageCompleted(stage.id, !stage.completed))}
                         style={{
+                          cursor: "pointer",
                           width: "30px",
                           height: "30px",
                           borderRadius: "50%",
@@ -544,9 +600,11 @@ export default function ApplicationDetail({ appId, onNavigate }: ApplicationDeta
                           <p style={{ fontFamily: "var(--font-body)", fontWeight: 600, fontSize: "0.875rem", color: "var(--foreground)" }}>
                             {stage.name}
                           </p>
-                          <span style={{ fontFamily: "var(--font-mono-base)", fontSize: "0.75rem", color: "var(--muted-foreground)" }}>
-                            {new Date(stage.date).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" })}
-                          </span>
+                          {stage.date && (
+                            <span style={{ fontFamily: "var(--font-mono-base)", fontSize: "0.75rem", color: "var(--muted-foreground)" }}>
+                              {toDate(stage.date).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" })}
+                            </span>
+                          )}
                         </div>
                         {stage.notes && (
                           <p style={{ fontFamily: "var(--font-body)", fontSize: "0.8375rem", color: "var(--muted-foreground)", lineHeight: 1.55 }}>
@@ -594,6 +652,7 @@ export default function ApplicationDetail({ appId, onNavigate }: ApplicationDeta
                 Related Contacts
               </h3>
               <button
+                onClick={() => setNewContact({ name: "", role: "", email: "" })}
                 style={{
                   background: "var(--muted)",
                   border: "1px solid var(--border)",
@@ -614,6 +673,19 @@ export default function ApplicationDetail({ appId, onNavigate }: ApplicationDeta
                 Link Contact
               </button>
             </div>
+
+            {newContact && (
+              <InlineForm
+                saving={saving}
+                canSave={newContact.name.trim() !== ""}
+                onCancel={() => setNewContact(null)}
+                onSave={() => save(() => addContact(app.id, newContact), () => setNewContact(null))}
+              >
+                <input autoFocus placeholder="Name" value={newContact.name} onChange={(e) => setNewContact({ ...newContact, name: e.target.value })} style={{ ...inlineInputStyle, flex: 2 }} />
+                <input placeholder="Role (e.g. Recruiter)" value={newContact.role} onChange={(e) => setNewContact({ ...newContact, role: e.target.value })} style={{ ...inlineInputStyle, flex: 2 }} />
+                <input type="email" placeholder="Email" value={newContact.email} onChange={(e) => setNewContact({ ...newContact, email: e.target.value })} style={{ ...inlineInputStyle, flex: 2 }} />
+              </InlineForm>
+            )}
 
             {app.contacts.length === 0 ? (
               <div style={{ textAlign: "center", padding: "48px 0", color: "var(--muted-foreground)" }}>
@@ -665,7 +737,7 @@ export default function ApplicationDetail({ appId, onNavigate }: ApplicationDeta
                       <p style={{ fontFamily: "var(--font-body)", fontSize: "0.8rem", color: "var(--muted-foreground)", marginBottom: "6px" }}>
                         {contact.role}
                       </p>
-                      <a
+                      {contact.email && <a
                         href={`mailto:${contact.email}`}
                         style={{
                           fontFamily: "var(--font-body)",
@@ -682,7 +754,7 @@ export default function ApplicationDetail({ appId, onNavigate }: ApplicationDeta
                           <path d="M1 3.5l4.5 3 4.5-3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
                         </svg>
                         {contact.email}
-                      </a>
+                      </a>}
                     </div>
                   </div>
                 ))}
@@ -692,5 +764,43 @@ export default function ApplicationDetail({ appId, onNavigate }: ApplicationDeta
         )}
       </div>
     </div>
+  );
+}
+
+const inlineInputStyle: React.CSSProperties = {
+  minWidth: 0,
+  padding: "8px 10px",
+  fontFamily: "var(--font-body)",
+  fontSize: "0.8125rem",
+  color: "var(--foreground)",
+  background: "var(--card)",
+  border: "1px solid var(--border)",
+  borderRadius: "7px",
+  outline: "none",
+};
+
+function InlineForm({ children, saving, canSave, onSave, onCancel }: { children: React.ReactNode; saving: boolean; canSave: boolean; onSave: () => void; onCancel: () => void }) {
+  return (
+    <form
+      onSubmit={(e) => { e.preventDefault(); if (canSave && !saving) onSave(); }}
+      onKeyDown={(e) => { if (e.key === "Escape") onCancel(); }}
+      style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap", background: "var(--muted)", borderRadius: "10px", padding: "12px", marginBottom: "20px" }}
+    >
+      {children}
+      <button
+        type="submit"
+        disabled={!canSave || saving}
+        style={{ padding: "8px 14px", borderRadius: "7px", border: "none", background: "var(--primary)", color: "white", fontFamily: "var(--font-body)", fontSize: "0.8rem", fontWeight: 600, cursor: "pointer", opacity: !canSave || saving ? 0.6 : 1 }}
+      >
+        {saving ? "Saving…" : "Save"}
+      </button>
+      <button
+        type="button"
+        onClick={onCancel}
+        style={{ padding: "8px 12px", borderRadius: "7px", border: "1px solid var(--border)", background: "var(--card)", color: "var(--foreground)", fontFamily: "var(--font-body)", fontSize: "0.8rem", cursor: "pointer" }}
+      >
+        Cancel
+      </button>
+    </form>
   );
 }

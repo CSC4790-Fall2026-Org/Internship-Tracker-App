@@ -1,4 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import type { Session } from "@supabase/supabase-js";
+import { supabase } from "./lib/supabase";
+import { DataProvider, useData } from "./data/DataContext";
 import NavBar from "./components/NavBar";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
@@ -10,37 +13,84 @@ import AddApplication from "./pages/AddApplication";
 type Screen = "dashboard" | "pipeline" | "applications" | "detail" | "add" | "calendar" | "networking" | "ai-coach";
 
 export default function App() {
-  const [authed, setAuthed] = useState(false);
+  const [session, setSession] = useState<Session | null>(null);
+  const [checkingSession, setCheckingSession] = useState(true);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session);
+      setCheckingSession(false);
+    });
+    const { data } = supabase.auth.onAuthStateChange((_event, newSession) => setSession(newSession));
+    return () => data.subscription.unsubscribe();
+  }, []);
+
+  if (checkingSession) return <CenteredMessage text="Loading…" />;
+  if (!session) return <Login />;
+
+  // Keyed by user so switching accounts resets all loaded data
+  return (
+    <DataProvider key={session.user.id}>
+      <AuthedApp session={session} />
+    </DataProvider>
+  );
+}
+
+function AuthedApp({ session }: { session: Session }) {
+  const { loading, error, refresh } = useData();
   const [screen, setScreen] = useState<Screen>("dashboard");
-  const [detailId, setDetailId] = useState<string>("1");
+  const [detailId, setDetailId] = useState<string>("");
 
   const navigate = (newScreen: string, id?: string) => {
     if (newScreen === "detail" && id) setDetailId(id);
     setScreen(newScreen as Screen);
   };
 
-  if (!authed) {
-    return <Login onLogin={() => setAuthed(true)} />;
-  }
-
   const isAddOpen = screen === "add";
 
   return (
     <div style={{ minHeight: "100%", background: "var(--background)" }}>
-      <NavBar activeScreen={screen} onNavigate={navigate} onLogout={() => setAuthed(false)} />
+      <NavBar activeScreen={screen} onNavigate={navigate} onLogout={() => supabase.auth.signOut()} userName={displayName(session)} />
       <main style={{ minHeight: "calc(100vh - 56px)" }}>
-        {screen === "dashboard" && <Dashboard onNavigate={navigate} />}
-        {(screen === "pipeline" || isAddOpen) && <Pipeline onNavigate={navigate} />}
-        {screen === "applications" && <ApplicationsTable onNavigate={navigate} />}
-        {screen === "detail" && <ApplicationDetail appId={detailId} onNavigate={navigate} />}
-        {(screen === "calendar" || screen === "networking" || screen === "ai-coach") && (
-          <PlaceholderScreen
-            label={screen === "ai-coach" ? "AI Coach" : screen.charAt(0).toUpperCase() + screen.slice(1)}
-            onNavigate={navigate}
-          />
+        {error && (
+          <div style={{ maxWidth: "1400px", margin: "16px auto 0", padding: "0 24px" }}>
+            <div style={{ background: "#FEE2E2", color: "#B91C1C", border: "1px solid #FCA5A5", borderRadius: "8px", padding: "10px 14px", fontFamily: "var(--font-body)", fontSize: "0.8125rem", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span>Couldn't load your data: {error}</span>
+              <button onClick={() => refresh()} style={{ background: "none", border: "none", color: "#B91C1C", fontWeight: 600, cursor: "pointer", textDecoration: "underline" }}>Retry</button>
+            </div>
+          </div>
+        )}
+        {loading ? (
+          <CenteredMessage text="Loading your applications…" />
+        ) : (
+          <>
+            {screen === "dashboard" && <Dashboard onNavigate={navigate} userName={displayName(session)} />}
+            {(screen === "pipeline" || isAddOpen) && <Pipeline onNavigate={navigate} />}
+            {screen === "applications" && <ApplicationsTable onNavigate={navigate} />}
+            {screen === "detail" && <ApplicationDetail appId={detailId} onNavigate={navigate} />}
+            {(screen === "calendar" || screen === "networking" || screen === "ai-coach") && (
+              <PlaceholderScreen
+                label={screen === "ai-coach" ? "AI Coach" : screen.charAt(0).toUpperCase() + screen.slice(1)}
+                onNavigate={navigate}
+              />
+            )}
+          </>
         )}
       </main>
       {isAddOpen && <AddApplication onNavigate={navigate} />}
+    </div>
+  );
+}
+
+function displayName(session: Session) {
+  const fullName = session.user.user_metadata?.full_name as string | undefined;
+  return fullName?.trim() || session.user.email?.split("@")[0] || "there";
+}
+
+function CenteredMessage({ text }: { text: string }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "calc(100vh - 56px)", fontFamily: "var(--font-body)", fontSize: "0.875rem", color: "var(--muted-foreground)" }}>
+      {text}
     </div>
   );
 }
