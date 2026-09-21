@@ -11,7 +11,7 @@ const navItems = [
   { id: "applications", label: "Applications" },
   { id: "calendar", label: "Calendar" },
   { id: "networking", label: "Networking" },
-  { id: "ai-coach", label: "AI Coach" },
+  { id: "ai-coach", label: "Profile" },
 ];
 
 export default function NavBar({ activeScreen, onNavigate, onLogout, userName }: NavBarProps) {

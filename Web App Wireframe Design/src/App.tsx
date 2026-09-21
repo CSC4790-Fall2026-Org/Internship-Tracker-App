@@ -9,6 +9,9 @@ import Pipeline from "./pages/Pipeline";
 import ApplicationsTable from "./pages/ApplicationsTable";
 import ApplicationDetail from "./pages/ApplicationDetail";
 import AddApplication from "./pages/AddApplication";
+import AiCoach from "./pages/AiCoach";
+import Onboarding from "./pages/Onboarding";
+import { fetchResumeProfile } from "./data/resume";
 
 type Screen = "dashboard" | "pipeline" | "applications" | "detail" | "add" | "calendar" | "networking" | "ai-coach";
 
@@ -28,12 +31,55 @@ export default function App() {
   if (checkingSession) return <CenteredMessage text="Loading…" />;
   if (!session) return <Login />;
 
-  // Keyed by user so switching accounts resets all loaded data
+  // Keyed by user so switching accounts resets onboarding state and all loaded data
+  return <SignedIn key={session.user.id} session={session} />;
+}
+
+/** New accounts get the resume step once, before the app proper. */
+function SignedIn({ session }: { session: Session }) {
+  const [needsOnboarding, setNeedsOnboarding] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (session.user.user_metadata?.onboarded) {
+      setNeedsOnboarding(false);
+      return;
+    }
+    // Accounts created before this flow existed may already have a resume on file.
+    fetchResumeProfile()
+      .then(async (profile) => {
+        if (!profile) return setNeedsOnboarding(true);
+        await markOnboarded();
+        setNeedsOnboarding(false);
+      })
+      .catch(() => setNeedsOnboarding(true));
+  }, [session.user.id, session.user.user_metadata?.onboarded]);
+
+  if (needsOnboarding === null) return <CenteredMessage text="Loading…" />;
+
+  if (needsOnboarding) {
+    return (
+      <Onboarding
+        userId={session.user.id}
+        userName={displayName(session)}
+        onFinish={async () => {
+          await markOnboarded();
+          setNeedsOnboarding(false);
+        }}
+      />
+    );
+  }
+
   return (
-    <DataProvider key={session.user.id}>
+    <DataProvider>
       <AuthedApp session={session} />
     </DataProvider>
   );
+}
+
+// Stored on the user, so the step doesn't reappear on the next sign-in.
+async function markOnboarded() {
+  const { error } = await supabase.auth.updateUser({ data: { onboarded: true } });
+  if (error) console.error("Couldn't record onboarding:", error.message);
 }
 
 function AuthedApp({ session }: { session: Session }) {
@@ -68,9 +114,10 @@ function AuthedApp({ session }: { session: Session }) {
             {(screen === "pipeline" || isAddOpen) && <Pipeline onNavigate={navigate} />}
             {screen === "applications" && <ApplicationsTable onNavigate={navigate} />}
             {screen === "detail" && <ApplicationDetail appId={detailId} onNavigate={navigate} />}
-            {(screen === "calendar" || screen === "networking" || screen === "ai-coach") && (
+            {screen === "ai-coach" && <AiCoach userId={session.user.id} />}
+            {(screen === "calendar" || screen === "networking") && (
               <PlaceholderScreen
-                label={screen === "ai-coach" ? "AI Coach" : screen.charAt(0).toUpperCase() + screen.slice(1)}
+                label={screen.charAt(0).toUpperCase() + screen.slice(1)}
                 onNavigate={navigate}
               />
             )}

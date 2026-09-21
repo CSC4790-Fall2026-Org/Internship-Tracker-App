@@ -153,6 +153,69 @@ export type Database = {
           },
         ]
       }
+      resume_profiles: {
+        Row: {
+          created_at: string
+          email: string
+          experience: Json
+          file_name: string | null
+          file_path: string | null
+          full_name: string
+          graduation: string
+          id: string
+          interests: string[]
+          major: string
+          parsed_at: string | null
+          phone: string
+          preferred_locations: string[]
+          school: string
+          skills: string[]
+          summary: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          email?: string
+          experience?: Json
+          file_name?: string | null
+          file_path?: string | null
+          full_name?: string
+          graduation?: string
+          id?: string
+          interests?: string[]
+          major?: string
+          parsed_at?: string | null
+          phone?: string
+          preferred_locations?: string[]
+          school?: string
+          skills?: string[]
+          summary?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          experience?: Json
+          file_name?: string | null
+          file_path?: string | null
+          full_name?: string
+          graduation?: string
+          id?: string
+          interests?: string[]
+          major?: string
+          parsed_at?: string | null
+          phone?: string
+          preferred_locations?: string[]
+          school?: string
+          skills?: string[]
+          summary?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       tasks: {
         Row: {
           application_id: string | null
