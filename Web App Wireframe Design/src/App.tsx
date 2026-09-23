@@ -10,6 +10,7 @@ import ApplicationsTable from "./pages/ApplicationsTable";
 import ApplicationDetail from "./pages/ApplicationDetail";
 import AddApplication from "./pages/AddApplication";
 import AiCoach from "./pages/AiCoach";
+import Calendar from "./pages/Calendar";
 import Networking from "./pages/Networking";
 import Onboarding from "./pages/Onboarding";
 import { fetchResumeProfile } from "./data/resume";
@@ -117,7 +118,7 @@ function AuthedApp({ session }: { session: Session }) {
             {screen === "detail" && <ApplicationDetail appId={detailId} onNavigate={navigate} />}
             {screen === "ai-coach" && <AiCoach userId={session.user.id} />}
             {screen === "networking" && <Networking onNavigate={navigate} />}
-            {screen === "calendar" && <PlaceholderScreen label="Calendar" onNavigate={navigate} />}
+            {screen === "calendar" && <Calendar onNavigate={navigate} />}
           </>
         )}
       </main>
@@ -139,22 +140,3 @@ function CenteredMessage({ text }: { text: string }) {
   );
 }
 
-function PlaceholderScreen({ label, onNavigate }: { label: string; onNavigate: (s: string) => void }) {
-  return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "calc(100vh - 56px)", gap: "12px" }}>
-      <div style={{ width: "52px", height: "52px", borderRadius: "14px", background: "var(--accent)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "4px" }}>
-        <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
-          <rect x="3" y="3" width="7" height="7" rx="2" stroke="var(--primary)" strokeWidth="1.5" />
-          <rect x="12" y="3" width="7" height="7" rx="2" stroke="var(--primary)" strokeWidth="1.5" />
-          <rect x="3" y="12" width="7" height="7" rx="2" stroke="var(--primary)" strokeWidth="1.5" />
-          <rect x="12" y="12" width="7" height="7" rx="2" stroke="var(--primary)" strokeWidth="1.5" />
-        </svg>
-      </div>
-      <h2 style={{ fontFamily: "var(--font-heading)", fontSize: "1.25rem", fontWeight: 700, color: "var(--foreground)", letterSpacing: "-0.02em" }}>{label}</h2>
-      <p style={{ fontFamily: "var(--font-body)", fontSize: "0.875rem", color: "var(--muted-foreground)" }}>This section is coming soon.</p>
-      <button onClick={() => onNavigate("dashboard")} style={{ marginTop: "8px", fontFamily: "var(--font-body)", fontSize: "0.8125rem", color: "var(--primary)", background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}>
-        ← Back to Dashboard
-      </button>
-    </div>
-  );
-}

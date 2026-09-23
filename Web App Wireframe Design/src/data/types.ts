@@ -45,3 +45,12 @@ export interface Task {
   applicationId: string | null;
   company: string;
 }
+
+export interface CalendarEvent {
+  id: string;
+  title: string;
+  date: string;
+  startTime: string;
+  notes: string;
+  applicationId: string | null;
+}

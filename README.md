@@ -22,6 +22,14 @@ The schema is in `supabase/migrations/`. It defines `applications`, `interview_s
 npx supabase gen types typescript --project-id agckhqdtazdgxpeqljcg > src/lib/database.types.ts
 ```
 
+### Calendar
+
+The **Calendar** tab shows a month grid with four kinds of item: application deadlines, interview stages, unfinished task due dates, and events the user creates. Only the last of those is stored — in `calendar_events` — since the others already live on their own tables and are read directly, so they can never drift out of sync.
+
+A **Month/Week** toggle switches between a month grid and a seven-column week view that shows every item in full rather than truncating to three per day. Both views share one anchor date, so switching between them keeps your place, and the arrows step by month or by week depending on which is active.
+
+Clicking any day opens the new-event form for that date; clicking a deadline or interview jumps to its application. An **Upcoming** panel lists the next eight items from today.
+
 ### Networking
 
 The **Networking** tab is the contact book: name, company, position, notes, email and phone. Contacts belong to the user, not to a single application, and `application_contacts` links a person to any number of applications — so one recruiter can cover two roles at the same company. Contacts can also be linked (or unlinked) from an application's Contacts tab, which offers existing contacts with same-company colleagues listed first.

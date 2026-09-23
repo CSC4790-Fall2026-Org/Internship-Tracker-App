@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { supabase } from "../lib/supabase";
 import type { Tables, TablesUpdate } from "../lib/database.types";
-import type { Application, AppStatus, Contact, Task } from "./types";
+import type { Application, AppStatus, CalendarEvent, Contact, Task } from "./types";
 import { timeAgo, todayISO } from "./dates";
 
 type ApplicationRow = Tables<"applications"> & {
@@ -25,6 +25,14 @@ export interface NewApplication {
   notes: string;
 }
 
+export interface CalendarEventInput {
+  title: string;
+  date: string;
+  startTime: string;
+  notes: string;
+  applicationId: string | null;
+}
+
 export interface ContactInput {
   name: string;
   role: string;
@@ -44,6 +52,7 @@ export interface ActivityItem {
 interface DataContextValue {
   applications: Application[];
   contacts: Contact[];
+  events: CalendarEvent[];
   tasks: Task[];
   recentActivity: ActivityItem[];
   loading: boolean;
@@ -59,6 +68,9 @@ interface DataContextValue {
   deleteContact: (id: string) => Promise<void>;
   /** Replaces the set of applications a contact is linked to. */
   setContactApplications: (contactId: string, applicationIds: string[]) => Promise<void>;
+  addEvent: (event: CalendarEventInput) => Promise<void>;
+  updateEvent: (id: string, event: CalendarEventInput) => Promise<void>;
+  deleteEvent: (id: string) => Promise<void>;
   addTask: (task: { text: string; due: string; applicationId: string | null }) => Promise<void>;
   setTaskDone: (taskId: string, done: boolean) => Promise<void>;
 }
@@ -72,6 +84,18 @@ function logoFor(company: string) {
   const initials = (words.length > 1 ? words[0][0] + words[1][0] : company.trim().slice(0, 2)).toUpperCase();
   const hash = [...company].reduce((h, c) => h + c.charCodeAt(0), 0);
   return { logo_initials: initials, logo_color: LOGO_COLORS[hash % LOGO_COLORS.length] };
+}
+
+function toEvent(row: Tables<"calendar_events">): CalendarEvent {
+  return {
+    id: row.id,
+    title: row.title,
+    date: row.date,
+    // Postgres returns "HH:MM:SS"; the UI works in "HH:MM".
+    startTime: row.start_time ? row.start_time.slice(0, 5) : "",
+    notes: row.notes,
+    applicationId: row.application_id,
+  };
 }
 
 function toContact(row: ContactRow): Contact {
@@ -139,19 +163,22 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [appRows, setAppRows] = useState<ApplicationRow[]>([]);
   const [taskRows, setTaskRows] = useState<TaskRow[]>([]);
   const [contactRows, setContactRows] = useState<ContactRow[]>([]);
+  const [eventRows, setEventRows] = useState<Tables<"calendar_events">[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
-      const [apps, tasks, contacts] = await Promise.all([
+      const [apps, tasks, contacts, events] = await Promise.all([
         supabase.from("applications").select("*, interview_stages(*)").order("created_at"),
         supabase.from("tasks").select("*, applications(company)").order("done").order("due", { nullsFirst: false }),
         supabase.from("contacts").select("*, application_contacts(application_id)").order("name"),
+        supabase.from("calendar_events").select("*").order("date"),
       ]);
       setAppRows(check(apps).data ?? []);
       setTaskRows(check(tasks).data ?? []);
       setContactRows(check(contacts).data ?? []);
+      setEventRows(check(events).data ?? []);
       setError(null);
     } catch (e) {
       setError((e as Error).message);
@@ -187,6 +214,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     return {
       applications,
       contacts,
+      events: eventRows.map(toEvent),
       tasks: taskRows.map((t) => ({
         id: t.id,
         text: t.text,
@@ -303,6 +331,33 @@ export function DataProvider({ children }: { children: ReactNode }) {
         await refresh();
       },
 
+      addEvent: (event) =>
+        mutate(() =>
+          supabase.from("calendar_events").insert({
+            title: event.title.trim(),
+            date: event.date,
+            start_time: event.startTime || null,
+            notes: event.notes,
+            application_id: event.applicationId,
+          }),
+        ),
+
+      updateEvent: (id, event) =>
+        mutate(() =>
+          supabase
+            .from("calendar_events")
+            .update({
+              title: event.title.trim(),
+              date: event.date,
+              start_time: event.startTime || null,
+              notes: event.notes,
+              application_id: event.applicationId,
+            })
+            .eq("id", id),
+        ),
+
+      deleteEvent: (id) => mutate(() => supabase.from("calendar_events").delete().eq("id", id)),
+
       addTask: (task) =>
         mutate(() => supabase.from("tasks").insert({ text: task.text.trim(), due: task.due || null, application_id: task.applicationId })),
 
@@ -312,7 +367,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         await mutate(() => supabase.from("tasks").update({ done }).eq("id", taskId));
       },
     };
-  }, [appRows, taskRows, contactRows, loading, error, refresh, mutate]);
+  }, [appRows, taskRows, contactRows, eventRows, loading, error, refresh, mutate]);
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
 }

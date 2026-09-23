@@ -107,6 +107,50 @@ export type Database = {
         }
         Relationships: []
       }
+      calendar_events: {
+        Row: {
+          application_id: string | null
+          created_at: string
+          date: string
+          id: string
+          notes: string
+          start_time: string | null
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          application_id?: string | null
+          created_at?: string
+          date: string
+          id?: string
+          notes?: string
+          start_time?: string | null
+          title: string
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          application_id?: string | null
+          created_at?: string
+          date?: string
+          id?: string
+          notes?: string
+          start_time?: string | null
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "calendar_events_application_id_fkey"
+            columns: ["application_id"]
+            isOneToOne: false
+            referencedRelation: "applications"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       contacts: {
         Row: {
           company: string
