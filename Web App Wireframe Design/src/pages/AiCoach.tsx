@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "../lib/supabase";
-import { fetchResumeProfile, uploadAndParseResume, type ResumeProfile, type UploadStage } from "../data/resume";
+import type { Json } from "../lib/database.types";
+import { fetchResumeProfile, uploadAndParseResume, type ExperienceItem, type ResumeProfile, type UploadStage } from "../data/resume";
 
 type Stage = "idle" | UploadStage;
 
@@ -11,6 +12,7 @@ export default function AiCoach({ userId }: { userId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
+  const [editingExperience, setEditingExperience] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -37,6 +39,20 @@ export default function AiCoach({ userId }: { userId: string }) {
     setSaved(false);
   };
 
+  const updateExperience = (index: number, field: keyof ExperienceItem, value: string) =>
+    update(
+      "experience",
+      profile!.experience.map((item, i) => (i === index ? { ...item, [field]: value } : item)),
+    );
+
+  const removeExperience = (index: number) =>
+    update("experience", profile!.experience.filter((_, i) => i !== index));
+
+  const addExperience = () => {
+    update("experience", [...profile!.experience, { title: "", organization: "", dates: "", highlight: "" }]);
+    setEditingExperience(true);
+  };
+
   const saveProfile = async () => {
     if (!profile) return;
     setSavingProfile(true);
@@ -53,6 +69,8 @@ export default function AiCoach({ userId }: { userId: string }) {
         skills: profile.skills,
         interests: profile.interests,
         preferred_locations: profile.preferred_locations,
+        // jsonb column: the row type is Json, our app type is stricter.
+        experience: profile.experience as unknown as Json,
       })
       .eq("id", profile.id);
     setSavingProfile(false);
@@ -166,29 +184,114 @@ export default function AiCoach({ userId }: { userId: string }) {
             <TagEditor tags={profile.preferred_locations} onChange={(v) => update("preferred_locations", v)} placeholder="Add a location" />
           </Card>
 
-          {profile.experience.length > 0 && (
-            <Card title="Experience">
+          <Card
+            title="Experience"
+            action={
+              <button
+                onClick={() => setEditingExperience((v) => !v)}
+                style={{ fontFamily: "var(--font-body)", fontSize: "0.75rem", fontWeight: 600, color: "var(--primary)", background: "none", border: "none", cursor: "pointer" }}
+              >
+                {editingExperience ? "Done" : "Edit"}
+              </button>
+            }
+          >
+            {profile.experience.length === 0 && !editingExperience ? (
+              <p style={{ fontFamily: "var(--font-body)", fontSize: "0.8rem", color: "var(--muted-foreground)" }}>
+                Nothing here yet.
+              </p>
+            ) : (
               <div className="flex flex-col gap-3">
-                {profile.experience.map((item, i) => (
-                  <div key={i} style={{ background: "var(--muted)", borderRadius: "8px", padding: "12px 14px" }}>
-                    <div className="flex items-center justify-between">
-                      <p style={{ fontFamily: "var(--font-body)", fontWeight: 600, fontSize: "0.8375rem", color: "var(--foreground)" }}>
-                        {item.title}{item.organization && ` · ${item.organization}`}
-                      </p>
-                      <span style={{ fontFamily: "var(--font-mono-base)", fontSize: "0.6875rem", color: "var(--muted-foreground)" }}>
-                        {item.dates}
-                      </span>
+                {profile.experience.map((item, i) =>
+                  editingExperience ? (
+                    <div key={i} style={{ background: "var(--muted)", borderRadius: "8px", padding: "14px" }}>
+                      <div className="grid grid-cols-2 gap-3 mb-3">
+                        <div>
+                          <label style={smallLabelStyle}>Title</label>
+                          <input
+                            value={item.title}
+                            onChange={(e) => updateExperience(i, "title", e.target.value)}
+                            placeholder="e.g. Software Engineering Intern"
+                            style={{ ...inputStyle, background: "var(--card)" }}
+                          />
+                        </div>
+                        <div>
+                          <label style={smallLabelStyle}>Organization</label>
+                          <input
+                            value={item.organization}
+                            onChange={(e) => updateExperience(i, "organization", e.target.value)}
+                            placeholder="e.g. Comcast"
+                            style={{ ...inputStyle, background: "var(--card)" }}
+                          />
+                        </div>
+                      </div>
+                      <div className="mb-3">
+                        <label style={smallLabelStyle}>Dates</label>
+                        <input
+                          value={item.dates}
+                          onChange={(e) => updateExperience(i, "dates", e.target.value)}
+                          placeholder="e.g. Jun 2026 - Aug 2026"
+                          style={{ ...inputStyle, background: "var(--card)", maxWidth: "240px" }}
+                        />
+                      </div>
+                      <div>
+                        <label style={smallLabelStyle}>What you did</label>
+                        <textarea
+                          value={item.highlight}
+                          onChange={(e) => updateExperience(i, "highlight", e.target.value)}
+                          rows={2}
+                          placeholder="One sentence describing the work and its impact"
+                          style={{ ...inputStyle, background: "var(--card)", resize: "vertical", lineHeight: 1.6 }}
+                        />
+                      </div>
+                      <div style={{ textAlign: "right", marginTop: "8px" }}>
+                        <button
+                          onClick={() => removeExperience(i)}
+                          style={{ fontFamily: "var(--font-body)", fontSize: "0.75rem", color: "#DC2626", background: "none", border: "none", cursor: "pointer" }}
+                        >
+                          Remove entry
+                        </button>
+                      </div>
                     </div>
-                    {item.highlight && (
-                      <p style={{ fontFamily: "var(--font-body)", fontSize: "0.8rem", color: "var(--muted-foreground)", marginTop: "3px", lineHeight: 1.5 }}>
-                        {item.highlight}
-                      </p>
-                    )}
-                  </div>
-                ))}
+                  ) : (
+                    <div key={i} style={{ background: "var(--muted)", borderRadius: "8px", padding: "12px 14px" }}>
+                      <div className="flex items-center justify-between">
+                        <p style={{ fontFamily: "var(--font-body)", fontWeight: 600, fontSize: "0.8375rem", color: "var(--foreground)" }}>
+                          {item.title || "Untitled"}{item.organization && ` · ${item.organization}`}
+                        </p>
+                        <span style={{ fontFamily: "var(--font-mono-base)", fontSize: "0.6875rem", color: "var(--muted-foreground)" }}>
+                          {item.dates}
+                        </span>
+                      </div>
+                      {item.highlight && (
+                        <p style={{ fontFamily: "var(--font-body)", fontSize: "0.8rem", color: "var(--muted-foreground)", marginTop: "3px", lineHeight: 1.5 }}>
+                          {item.highlight}
+                        </p>
+                      )}
+                    </div>
+                  ),
+                )}
               </div>
-            </Card>
-          )}
+            )}
+
+            {editingExperience && (
+              <button
+                onClick={addExperience}
+                style={{
+                  marginTop: "12px", width: "100%", padding: "8px",
+                  borderRadius: "6px", border: "1.5px dashed var(--border)", background: "transparent",
+                  fontFamily: "var(--font-body)", fontSize: "0.8rem", color: "var(--muted-foreground)", cursor: "pointer",
+                }}
+              >
+                + Add entry
+              </button>
+            )}
+
+            {editingExperience && (
+              <p style={{ fontFamily: "var(--font-body)", fontSize: "0.75rem", color: "var(--muted-foreground)", marginTop: "10px" }}>
+                Changes are kept when you press Save changes below.
+              </p>
+            )}
+          </Card>
 
           <div className="flex items-center gap-3">
             <button
@@ -218,12 +321,20 @@ const inputStyle: React.CSSProperties = {
   background: "var(--muted)", border: "1px solid var(--border)", borderRadius: "8px", outline: "none",
 };
 
-function Card({ title, children }: { title: string; children: React.ReactNode }) {
+const smallLabelStyle: React.CSSProperties = {
+  fontFamily: "var(--font-body)", fontSize: "0.75rem", fontWeight: 500,
+  color: "var(--muted-foreground)", display: "block", marginBottom: "4px",
+};
+
+function Card({ title, children, action }: { title: string; children: React.ReactNode; action?: React.ReactNode }) {
   return (
     <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: "12px", padding: "20px", marginBottom: "16px" }}>
-      <h3 style={{ fontFamily: "var(--font-heading)", fontWeight: 600, fontSize: "0.875rem", color: "var(--foreground)", marginBottom: "12px" }}>
-        {title}
-      </h3>
+      <div className="flex items-center justify-between" style={{ marginBottom: "12px" }}>
+        <h3 style={{ fontFamily: "var(--font-heading)", fontWeight: 600, fontSize: "0.875rem", color: "var(--foreground)" }}>
+          {title}
+        </h3>
+        {action}
+      </div>
       {children}
     </div>
   );
