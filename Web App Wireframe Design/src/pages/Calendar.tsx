@@ -1,10 +1,14 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useData, type CalendarEventInput } from "../data/DataContext";
 import type { CalendarEvent } from "../data/types";
 import { toDate, todayISO } from "../data/dates";
 
 interface CalendarProps {
   onNavigate: (screen: string, id?: string) => void;
+  /** Event to open on arrival, set when search jumps straight to one. */
+  focusEventId?: string;
+  /** Clears the request once handled, so the same event can be opened again. */
+  onFocusHandled?: () => void;
 }
 
 type ItemKind = "deadline" | "interview" | "task" | "event";
@@ -41,12 +45,23 @@ function formatTime(time: string) {
   return `${h % 12 === 0 ? 12 : h % 12}:${String(m).padStart(2, "0")} ${period}`;
 }
 
-export default function Calendar({ onNavigate }: CalendarProps) {
+export default function Calendar({ onNavigate, focusEventId, onFocusHandled }: CalendarProps) {
   const { applications, tasks, events } = useData();
   const today = todayISO();
   const [view, setView] = useState<"month" | "week">("month");
   const [anchor, setAnchor] = useState(today);
   const [editing, setEditing] = useState<CalendarEvent | { date: string } | null>(null);
+
+  useEffect(() => {
+    if (!focusEventId) return;
+    const event = events.find((e) => e.id === focusEventId);
+    if (event) {
+      setAnchor(event.date);
+      setEditing(event);
+    }
+    onFocusHandled?.();
+    // Only react to a new focus request, not to events reloading.
+  }, [focusEventId]);
 
   // Everything dated, from all four sources.
   const items = useMemo<CalendarItem[]>(() => {

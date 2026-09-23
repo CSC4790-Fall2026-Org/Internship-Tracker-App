@@ -10,6 +10,7 @@ import ApplicationsTable from "./pages/ApplicationsTable";
 import ApplicationDetail from "./pages/ApplicationDetail";
 import AddApplication from "./pages/AddApplication";
 import AiCoach from "./pages/AiCoach";
+import SearchPalette from "./components/SearchPalette";
 import Calendar from "./pages/Calendar";
 import Networking from "./pages/Networking";
 import Onboarding from "./pages/Onboarding";
@@ -88,17 +89,32 @@ function AuthedApp({ session }: { session: Session }) {
   const { loading, error, refresh } = useData();
   const [screen, setScreen] = useState<Screen>("dashboard");
   const [detailId, setDetailId] = useState<string>("");
+  // Row to open once a screen mounts, e.g. jumping to one contact from search.
+  const [focusId, setFocusId] = useState<string>("");
+  const [searchOpen, setSearchOpen] = useState(false);
 
   const navigate = (newScreen: string, id?: string) => {
     if (newScreen === "detail" && id) setDetailId(id);
+    setFocusId(newScreen === "networking" || newScreen === "calendar" ? id ?? "" : "");
     setScreen(newScreen as Screen);
   };
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setSearchOpen(true);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   const isAddOpen = screen === "add";
 
   return (
     <div style={{ minHeight: "100%", background: "var(--background)" }}>
-      <NavBar activeScreen={screen} onNavigate={navigate} onLogout={() => supabase.auth.signOut()} userName={displayName(session)} />
+      <NavBar activeScreen={screen} onNavigate={navigate} onLogout={() => supabase.auth.signOut()} userName={displayName(session)} onOpenSearch={() => setSearchOpen(true)} />
       <main style={{ minHeight: "calc(100vh - 56px)" }}>
         {error && (
           <div style={{ maxWidth: "1400px", margin: "16px auto 0", padding: "0 24px" }}>
@@ -117,12 +133,13 @@ function AuthedApp({ session }: { session: Session }) {
             {screen === "applications" && <ApplicationsTable onNavigate={navigate} />}
             {screen === "detail" && <ApplicationDetail appId={detailId} onNavigate={navigate} />}
             {screen === "ai-coach" && <AiCoach userId={session.user.id} />}
-            {screen === "networking" && <Networking onNavigate={navigate} />}
-            {screen === "calendar" && <Calendar onNavigate={navigate} />}
+            {screen === "networking" && <Networking onNavigate={navigate} focusContactId={focusId} onFocusHandled={() => setFocusId("")} />}
+            {screen === "calendar" && <Calendar onNavigate={navigate} focusEventId={focusId} onFocusHandled={() => setFocusId("")} />}
           </>
         )}
       </main>
       {isAddOpen && <AddApplication onNavigate={navigate} />}
+      {searchOpen && <SearchPalette onClose={() => setSearchOpen(false)} onNavigate={navigate} />}
     </div>
   );
 }

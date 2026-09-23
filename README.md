@@ -22,6 +22,12 @@ The schema is in `supabase/migrations/`. It defines `applications`, `interview_s
 npx supabase gen types typescript --project-id agckhqdtazdgxpeqljcg > src/lib/database.types.ts
 ```
 
+### Search
+
+The nav bar's search button (or ⌘K / Ctrl+K) opens a command palette that searches applications, contacts, events, tasks and the pages themselves. Results are grouped and ranked — title matches beat matches on hidden fields like notes, emails or locations — and arrow keys plus Enter work throughout.
+
+Picking a result navigates: applications open their detail page, contacts open on the Networking tab, and events open on the Calendar with the view moved to their date. That deep-linking runs through the `focusId` App passes down, which each page clears once handled.
+
 ### Calendar
 
 The **Calendar** tab shows a month grid with four kinds of item: application deadlines, interview stages, unfinished task due dates, and events the user creates. Only the last of those is stored — in `calendar_events` — since the others already live on their own tables and are read directly, so they can never drift out of sync.

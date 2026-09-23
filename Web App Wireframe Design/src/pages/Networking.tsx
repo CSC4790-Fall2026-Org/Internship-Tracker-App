@@ -1,17 +1,29 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useData, type ContactInput } from "../data/DataContext";
 import type { Application, Contact } from "../data/types";
 
 interface NetworkingProps {
   onNavigate: (screen: string, id?: string) => void;
+  /** Contact to open on arrival, set when search jumps straight to a person. */
+  focusContactId?: string;
+  /** Clears the request once handled, so the same person can be opened again. */
+  onFocusHandled?: () => void;
 }
 
 const EMPTY: ContactInput = { name: "", role: "", company: "", email: "", phone: "", notes: "" };
 
-export default function Networking({ onNavigate }: NetworkingProps) {
+export default function Networking({ onNavigate, focusContactId, onFocusHandled }: NetworkingProps) {
   const { contacts, applications } = useData();
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState<Contact | "new" | null>(null);
+
+  useEffect(() => {
+    if (!focusContactId) return;
+    const contact = contacts.find((c) => c.id === focusContactId);
+    if (contact) setEditing(contact);
+    onFocusHandled?.();
+    // Only react to a new focus request, not to contacts reloading.
+  }, [focusContactId]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();

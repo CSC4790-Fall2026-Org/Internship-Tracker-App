@@ -3,6 +3,7 @@ interface NavBarProps {
   onNavigate: (screen: string) => void;
   onLogout: () => void;
   userName: string;
+  onOpenSearch: () => void;
 }
 
 const navItems = [
@@ -14,7 +15,7 @@ const navItems = [
   { id: "ai-coach", label: "Profile" },
 ];
 
-export default function NavBar({ activeScreen, onNavigate, onLogout, userName }: NavBarProps) {
+export default function NavBar({ activeScreen, onNavigate, onLogout, userName, onOpenSearch }: NavBarProps) {
   const initials = userName.split(/\s+/).filter(Boolean).map((w) => w[0]).slice(0, 2).join("").toUpperCase();
 
   return (
@@ -101,6 +102,8 @@ export default function NavBar({ activeScreen, onNavigate, onLogout, userName }:
         {/* Right side */}
         <div className="ml-auto flex items-center gap-3">
           <button
+            onClick={onOpenSearch}
+            title="Search (⌘K)"
             style={{
               background: "var(--muted)",
               border: "1px solid var(--border)",
