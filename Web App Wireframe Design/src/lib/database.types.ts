@@ -17,6 +17,42 @@ export type Database = {
   }
   public: {
     Tables: {
+      application_contacts: {
+        Row: {
+          application_id: string
+          contact_id: string
+          created_at: string
+          user_id: string
+        }
+        Insert: {
+          application_id: string
+          contact_id: string
+          created_at?: string
+          user_id?: string
+        }
+        Update: {
+          application_id?: string
+          contact_id?: string
+          created_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "application_contacts_application_id_fkey"
+            columns: ["application_id"]
+            isOneToOne: false
+            referencedRelation: "applications"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "application_contacts_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       applications: {
         Row: {
           applied_date: string | null
@@ -73,44 +109,39 @@ export type Database = {
       }
       contacts: {
         Row: {
-          application_id: string
           company: string
           created_at: string
           email: string
           id: string
           name: string
+          notes: string
+          phone: string
           role: string
           user_id: string
         }
         Insert: {
-          application_id: string
           company?: string
           created_at?: string
           email?: string
           id?: string
           name: string
+          notes?: string
+          phone?: string
           role?: string
           user_id?: string
         }
         Update: {
-          application_id?: string
           company?: string
           created_at?: string
           email?: string
           id?: string
           name?: string
+          notes?: string
+          phone?: string
           role?: string
           user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "contacts_application_id_fkey"
-            columns: ["application_id"]
-            isOneToOne: false
-            referencedRelation: "applications"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       interview_stages: {
         Row: {

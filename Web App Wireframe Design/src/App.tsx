@@ -10,6 +10,7 @@ import ApplicationsTable from "./pages/ApplicationsTable";
 import ApplicationDetail from "./pages/ApplicationDetail";
 import AddApplication from "./pages/AddApplication";
 import AiCoach from "./pages/AiCoach";
+import Networking from "./pages/Networking";
 import Onboarding from "./pages/Onboarding";
 import { fetchResumeProfile } from "./data/resume";
 
@@ -115,12 +116,8 @@ function AuthedApp({ session }: { session: Session }) {
             {screen === "applications" && <ApplicationsTable onNavigate={navigate} />}
             {screen === "detail" && <ApplicationDetail appId={detailId} onNavigate={navigate} />}
             {screen === "ai-coach" && <AiCoach userId={session.user.id} />}
-            {(screen === "calendar" || screen === "networking") && (
-              <PlaceholderScreen
-                label={screen.charAt(0).toUpperCase() + screen.slice(1)}
-                onNavigate={navigate}
-              />
-            )}
+            {screen === "networking" && <Networking onNavigate={navigate} />}
+            {screen === "calendar" && <PlaceholderScreen label="Calendar" onNavigate={navigate} />}
           </>
         )}
       </main>

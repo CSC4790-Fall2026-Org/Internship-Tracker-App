@@ -22,6 +22,10 @@ The schema is in `supabase/migrations/`. It defines `applications`, `interview_s
 npx supabase gen types typescript --project-id agckhqdtazdgxpeqljcg > src/lib/database.types.ts
 ```
 
+### Networking
+
+The **Networking** tab is the contact book: name, company, position, notes, email and phone. Contacts belong to the user, not to a single application, and `application_contacts` links a person to any number of applications — so one recruiter can cover two roles at the same company. Contacts can also be linked (or unlinked) from an application's Contacts tab, which offers existing contacts with same-company colleagues listed first.
+
 ### AI resume parsing
 
 The **Profile** tab lets a user upload a resume PDF. The file goes to a private `resumes` storage bucket, and the `parse-resume` Edge Function extracts the text (with `unpdf`) and sends it to Groq, which returns a structured profile saved in `resume_profiles`.

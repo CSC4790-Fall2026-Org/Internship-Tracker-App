@@ -1,12 +1,15 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { supabase } from "../lib/supabase";
 import type { Tables, TablesUpdate } from "../lib/database.types";
-import type { Application, AppStatus, Task } from "./types";
+import type { Application, AppStatus, Contact, Task } from "./types";
 import { timeAgo, todayISO } from "./dates";
 
 type ApplicationRow = Tables<"applications"> & {
   interview_stages: Tables<"interview_stages">[];
-  contacts: Tables<"contacts">[];
+};
+
+type ContactRow = Tables<"contacts"> & {
+  application_contacts: { application_id: string }[];
 };
 
 type TaskRow = Tables<"tasks"> & { applications: { company: string } | null };
@@ -22,6 +25,15 @@ export interface NewApplication {
   notes: string;
 }
 
+export interface ContactInput {
+  name: string;
+  role: string;
+  company: string;
+  email: string;
+  phone: string;
+  notes: string;
+}
+
 export interface ActivityItem {
   id: string;
   text: string;
@@ -31,6 +43,7 @@ export interface ActivityItem {
 
 interface DataContextValue {
   applications: Application[];
+  contacts: Contact[];
   tasks: Task[];
   recentActivity: ActivityItem[];
   loading: boolean;
@@ -41,7 +54,11 @@ interface DataContextValue {
   deleteApplications: (ids: string[]) => Promise<void>;
   addInterviewStage: (applicationId: string, stage: { name: string; date: string; notes: string }) => Promise<void>;
   setStageCompleted: (stageId: string, completed: boolean) => Promise<void>;
-  addContact: (applicationId: string, contact: { name: string; role: string; email: string }) => Promise<void>;
+  addContact: (contact: ContactInput, applicationIds?: string[]) => Promise<string>;
+  updateContact: (id: string, patch: Partial<ContactInput>) => Promise<void>;
+  deleteContact: (id: string) => Promise<void>;
+  /** Replaces the set of applications a contact is linked to. */
+  setContactApplications: (contactId: string, applicationIds: string[]) => Promise<void>;
   addTask: (task: { text: string; due: string; applicationId: string | null }) => Promise<void>;
   setTaskDone: (taskId: string, done: boolean) => Promise<void>;
 }
@@ -57,7 +74,20 @@ function logoFor(company: string) {
   return { logo_initials: initials, logo_color: LOGO_COLORS[hash % LOGO_COLORS.length] };
 }
 
-function toApplication(row: ApplicationRow): Application {
+function toContact(row: ContactRow): Contact {
+  return {
+    id: row.id,
+    name: row.name,
+    role: row.role,
+    company: row.company,
+    email: row.email,
+    phone: row.phone,
+    notes: row.notes,
+    applicationIds: row.application_contacts.map((link) => link.application_id),
+  };
+}
+
+function toApplication(row: ApplicationRow, contactsByApplication: Map<string, Contact[]>): Application {
   return {
     id: row.id,
     company: row.company,
@@ -74,7 +104,7 @@ function toApplication(row: ApplicationRow): Application {
     interviewStages: [...row.interview_stages]
       .sort((a, b) => (a.date ?? "9999").localeCompare(b.date ?? "9999") || a.created_at.localeCompare(b.created_at))
       .map((s) => ({ id: s.id, name: s.name, date: s.date ?? "", notes: s.notes, completed: s.completed })),
-    contacts: row.contacts.map((c) => ({ id: c.id, name: c.name, role: c.role, company: c.company, email: c.email })),
+    contacts: contactsByApplication.get(row.id) ?? [],
   };
 }
 
@@ -108,17 +138,20 @@ function check<T extends { error: { message: string } | null }>(result: T): T {
 export function DataProvider({ children }: { children: ReactNode }) {
   const [appRows, setAppRows] = useState<ApplicationRow[]>([]);
   const [taskRows, setTaskRows] = useState<TaskRow[]>([]);
+  const [contactRows, setContactRows] = useState<ContactRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
-      const [apps, tasks] = await Promise.all([
-        supabase.from("applications").select("*, interview_stages(*), contacts(*)").order("created_at"),
+      const [apps, tasks, contacts] = await Promise.all([
+        supabase.from("applications").select("*, interview_stages(*)").order("created_at"),
         supabase.from("tasks").select("*, applications(company)").order("done").order("due", { nullsFirst: false }),
+        supabase.from("contacts").select("*, application_contacts(application_id)").order("name"),
       ]);
       setAppRows(check(apps).data ?? []);
       setTaskRows(check(tasks).data ?? []);
+      setContactRows(check(contacts).data ?? []);
       setError(null);
     } catch (e) {
       setError((e as Error).message);
@@ -141,11 +174,19 @@ export function DataProvider({ children }: { children: ReactNode }) {
   );
 
   const value = useMemo<DataContextValue>(() => {
-    const applications = appRows.map(toApplication);
+    const contacts = contactRows.map(toContact);
+    const contactsByApplication = new Map<string, Contact[]>();
+    for (const contact of contacts) {
+      for (const applicationId of contact.applicationIds) {
+        contactsByApplication.set(applicationId, [...(contactsByApplication.get(applicationId) ?? []), contact]);
+      }
+    }
+    const applications = appRows.map((row) => toApplication(row, contactsByApplication));
     const companyById = new Map(applications.map((a) => [a.id, a.company]));
 
     return {
       applications,
+      contacts,
       tasks: taskRows.map((t) => ({
         id: t.id,
         text: t.text,
@@ -200,16 +241,67 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
       setStageCompleted: (stageId, completed) => mutate(() => supabase.from("interview_stages").update({ completed }).eq("id", stageId)),
 
-      addContact: (applicationId, contact) =>
+      addContact: async (contact, applicationIds = []) => {
+        const { data } = check(
+          await supabase
+            .from("contacts")
+            .insert({
+              name: contact.name.trim(),
+              role: contact.role.trim(),
+              company: contact.company.trim(),
+              email: contact.email.trim(),
+              phone: contact.phone.trim(),
+              notes: contact.notes,
+            })
+            .select("id")
+            .single(),
+        );
+        const id = data!.id;
+        if (applicationIds.length > 0) {
+          check(
+            await supabase
+              .from("application_contacts")
+              .insert(applicationIds.map((applicationId) => ({ application_id: applicationId, contact_id: id }))),
+          );
+        }
+        await refresh();
+        return id;
+      },
+
+      updateContact: (id, patch) =>
         mutate(() =>
-          supabase.from("contacts").insert({
-            application_id: applicationId,
-            name: contact.name.trim(),
-            role: contact.role.trim(),
-            email: contact.email.trim(),
-            company: companyById.get(applicationId) ?? "",
-          }),
+          supabase
+            .from("contacts")
+            .update({
+              ...(patch.name !== undefined && { name: patch.name.trim() }),
+              ...(patch.role !== undefined && { role: patch.role.trim() }),
+              ...(patch.company !== undefined && { company: patch.company.trim() }),
+              ...(patch.email !== undefined && { email: patch.email.trim() }),
+              ...(patch.phone !== undefined && { phone: patch.phone.trim() }),
+              ...(patch.notes !== undefined && { notes: patch.notes }),
+            })
+            .eq("id", id),
         ),
+
+      deleteContact: (id) => mutate(() => supabase.from("contacts").delete().eq("id", id)),
+
+      setContactApplications: async (contactId, applicationIds) => {
+        const current = contacts.find((c) => c.id === contactId)?.applicationIds ?? [];
+        const added = applicationIds.filter((id) => !current.includes(id));
+        const removed = current.filter((id) => !applicationIds.includes(id));
+
+        if (removed.length > 0) {
+          check(await supabase.from("application_contacts").delete().eq("contact_id", contactId).in("application_id", removed));
+        }
+        if (added.length > 0) {
+          check(
+            await supabase
+              .from("application_contacts")
+              .insert(added.map((applicationId) => ({ application_id: applicationId, contact_id: contactId }))),
+          );
+        }
+        await refresh();
+      },
 
       addTask: (task) =>
         mutate(() => supabase.from("tasks").insert({ text: task.text.trim(), due: task.due || null, application_id: task.applicationId })),
@@ -220,7 +312,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         await mutate(() => supabase.from("tasks").update({ done }).eq("id", taskId));
       },
     };
-  }, [appRows, taskRows, loading, error, refresh, mutate]);
+  }, [appRows, taskRows, contactRows, loading, error, refresh, mutate]);
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
 }

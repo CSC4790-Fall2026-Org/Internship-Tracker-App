@@ -17,7 +17,7 @@ interface ApplicationDetailProps {
 }
 
 export default function ApplicationDetail({ appId, onNavigate }: ApplicationDetailProps) {
-  const { applications, updateApplication, addInterviewStage, setStageCompleted, addContact } = useData();
+  const { applications, contacts, updateApplication, addInterviewStage, setStageCompleted, addContact, setContactApplications } = useData();
   const app = applications.find((a) => a.id === appId);
   const [activeTab, setActiveTab] = useState<"overview" | "interviews" | "contacts">("overview");
   const [newStage, setNewStage] = useState<{ name: string; date: string; notes: string } | null>(null);
@@ -39,6 +39,11 @@ export default function ApplicationDetail({ appId, onNavigate }: ApplicationDeta
 
   const status = app.status;
   const statusOpt = STATUS_OPTIONS.find((s) => s.id === status)!;
+
+  // People not already on this application, with colleagues at the same company first.
+  const linkableContacts = contacts
+    .filter((c) => !c.applicationIds.includes(app.id))
+    .sort((a, b) => Number(b.company === app.company) - Number(a.company === app.company) || a.name.localeCompare(b.name));
 
   // Runs a save and reports failures; the data layer reloads on success.
   const save = async (op: () => Promise<void>, onDone?: () => void) => {
@@ -674,12 +679,41 @@ export default function ApplicationDetail({ appId, onNavigate }: ApplicationDeta
               </button>
             </div>
 
+            {linkableContacts.length > 0 && (
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "16px" }}>
+                <select
+                  value=""
+                  onChange={(e) => {
+                    const contact = contacts.find((c) => c.id === e.target.value);
+                    if (contact) save(() => setContactApplications(contact.id, [...contact.applicationIds, app.id]));
+                  }}
+                  style={{ ...inlineInputStyle, background: "var(--muted)", maxWidth: "320px" }}
+                >
+                  <option value="">Link someone you already know…</option>
+                  {linkableContacts.map((contact) => (
+                    <option key={contact.id} value={contact.id}>
+                      {contact.name}
+                      {contact.company ? ` — ${contact.company}` : ""}
+                    </option>
+                  ))}
+                </select>
+                {saving && (
+                  <span style={{ fontFamily: "var(--font-body)", fontSize: "0.75rem", color: "var(--muted-foreground)" }}>Saving…</span>
+                )}
+              </div>
+            )}
+
             {newContact && (
               <InlineForm
                 saving={saving}
                 canSave={newContact.name.trim() !== ""}
                 onCancel={() => setNewContact(null)}
-                onSave={() => save(() => addContact(app.id, newContact), () => setNewContact(null))}
+                onSave={() =>
+                  save(
+                    () => addContact({ ...newContact, company: app.company, phone: "", notes: "" }, [app.id]).then(() => undefined),
+                    () => setNewContact(null),
+                  )
+                }
               >
                 <input autoFocus placeholder="Name" value={newContact.name} onChange={(e) => setNewContact({ ...newContact, name: e.target.value })} style={{ ...inlineInputStyle, flex: 2 }} />
                 <input placeholder="Role (e.g. Recruiter)" value={newContact.role} onChange={(e) => setNewContact({ ...newContact, role: e.target.value })} style={{ ...inlineInputStyle, flex: 2 }} />
@@ -730,10 +764,19 @@ export default function ApplicationDetail({ appId, onNavigate }: ApplicationDeta
                     >
                       {contact.name.split(" ").map((n) => n[0]).join("")}
                     </div>
-                    <div>
-                      <p style={{ fontFamily: "var(--font-body)", fontWeight: 600, fontSize: "0.875rem", color: "var(--foreground)", marginBottom: "2px" }}>
-                        {contact.name}
-                      </p>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div className="flex items-start justify-between gap-2">
+                        <p style={{ fontFamily: "var(--font-body)", fontWeight: 600, fontSize: "0.875rem", color: "var(--foreground)", marginBottom: "2px" }}>
+                          {contact.name}
+                        </p>
+                        <button
+                          onClick={() => save(() => setContactApplications(contact.id, contact.applicationIds.filter((id) => id !== app.id)))}
+                          title="Remove from this application"
+                          style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted-foreground)", fontSize: "0.75rem", padding: 0, textDecoration: "underline", flexShrink: 0 }}
+                        >
+                          Unlink
+                        </button>
+                      </div>
                       <p style={{ fontFamily: "var(--font-body)", fontSize: "0.8rem", color: "var(--muted-foreground)", marginBottom: "6px" }}>
                         {contact.role}
                       </p>

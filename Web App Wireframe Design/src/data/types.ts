@@ -14,6 +14,10 @@ export interface Contact {
   role: string;
   company: string;
   email: string;
+  phone: string;
+  notes: string;
+  /** Applications this person is linked to. */
+  applicationIds: string[];
 }
 
 export interface Application {

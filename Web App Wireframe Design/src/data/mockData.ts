@@ -23,8 +23,8 @@ export const applications: Application[] = [
       { id: "i3", name: "Virtual Onsite", date: "2026-09-08", notes: "4 rounds: 2x coding, 1x system design, 1x behavioral.", completed: false },
     ],
     contacts: [
-      { id: "c1", name: "Sarah Chen", role: "University Recruiter", company: "Acme Corp", email: "s.chen@acmecorp.com" },
-      { id: "c2", name: "Marcus Webb", role: "Hiring Manager, Platform", company: "Acme Corp", email: "m.webb@acmecorp.com" },
+      { id: "c1", name: "Sarah Chen", role: "University Recruiter", company: "Acme Corp", email: "s.chen@acmecorp.com", phone: "", notes: "", applicationIds: [] },
+      { id: "c2", name: "Marcus Webb", role: "Hiring Manager, Platform", company: "Acme Corp", email: "m.webb@acmecorp.com", phone: "", notes: "", applicationIds: [] },
     ],
   },
   {
@@ -58,7 +58,7 @@ export const applications: Application[] = [
     logoInitials: "MH",
     interviewStages: [],
     contacts: [
-      { id: "c3", name: "Jordan Lee", role: "Data Team Lead", company: "Meridian Health", email: "jordan.lee@meridianhealth.org" },
+      { id: "c3", name: "Jordan Lee", role: "Data Team Lead", company: "Meridian Health", email: "jordan.lee@meridianhealth.org", phone: "", notes: "", applicationIds: [] },
     ],
   },
   {
@@ -95,7 +95,7 @@ export const applications: Application[] = [
       { id: "i5", name: "Technical Interview", date: "2026-08-14", notes: "Database design and concurrency.", completed: true },
     ],
     contacts: [
-      { id: "c4", name: "Priya Nair", role: "Talent Acquisition", company: "Nexus Systems", email: "priya@nexussystems.com" },
+      { id: "c4", name: "Priya Nair", role: "Talent Acquisition", company: "Nexus Systems", email: "priya@nexussystems.com", phone: "", notes: "", applicationIds: [] },
     ],
   },
   {
@@ -117,7 +117,7 @@ export const applications: Application[] = [
       { id: "i8", name: "Final Interview", date: "2026-08-05", notes: "Research presentation + Q&A.", completed: true },
     ],
     contacts: [
-      { id: "c5", name: "Alex Rivera", role: "Research Lead", company: "ClearPath Labs", email: "alex.r@clearpathabs.ai" },
+      { id: "c5", name: "Alex Rivera", role: "Research Lead", company: "ClearPath Labs", email: "alex.r@clearpathabs.ai", phone: "", notes: "", applicationIds: [] },
     ],
   },
   {
