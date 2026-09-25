@@ -79,7 +79,7 @@ const DataContext = createContext<DataContextValue | null>(null);
 
 const LOGO_COLORS = ["#3B82F6", "#8B5CF6", "#10B981", "#F59E0B", "#EF4444", "#06B6D4", "#6366F1", "#EC4899"];
 
-function logoFor(company: string) {
+export function logoFor(company: string) {
   const words = company.trim().split(/\s+/).filter(Boolean);
   const initials = (words.length > 1 ? words[0][0] + words[1][0] : company.trim().slice(0, 2)).toUpperCase();
   const hash = [...company].reduce((h, c) => h + c.charCodeAt(0), 0);

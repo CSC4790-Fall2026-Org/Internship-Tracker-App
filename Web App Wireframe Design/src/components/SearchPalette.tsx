@@ -20,6 +20,7 @@ const GROUP_ORDER: ResultGroup[] = ["Applications", "People", "Events", "Tasks",
 
 const PAGES: { label: string; screen: string; hint: string }[] = [
   { label: "Dashboard", screen: "dashboard", hint: "Deadlines, tasks and activity" },
+  { label: "Jobs", screen: "jobs", hint: "Recommended jobs and job search" },
   { label: "Board", screen: "pipeline", hint: "Kanban and insights" },
   { label: "Applications", screen: "applications", hint: "Full application table" },
   { label: "Calendar", screen: "calendar", hint: "Month and week views" },

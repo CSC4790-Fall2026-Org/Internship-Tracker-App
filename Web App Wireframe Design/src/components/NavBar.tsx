@@ -8,6 +8,7 @@ interface NavBarProps {
 
 const navItems = [
   { id: "dashboard", label: "Dashboard" },
+  { id: "jobs", label: "Jobs" },
   { id: "pipeline", label: "Board" },
   { id: "applications", label: "Applications" },
   { id: "calendar", label: "Calendar" },

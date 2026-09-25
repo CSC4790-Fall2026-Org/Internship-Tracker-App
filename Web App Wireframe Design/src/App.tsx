@@ -13,10 +13,11 @@ import AiCoach from "./pages/AiCoach";
 import SearchPalette from "./components/SearchPalette";
 import Calendar from "./pages/Calendar";
 import Networking from "./pages/Networking";
+import Jobs from "./pages/Jobs";
 import Onboarding from "./pages/Onboarding";
 import { fetchResumeProfile } from "./data/resume";
 
-type Screen = "dashboard" | "pipeline" | "applications" | "detail" | "add" | "calendar" | "networking" | "ai-coach";
+type Screen = "dashboard" | "pipeline" | "applications" | "detail" | "add" | "calendar" | "networking" | "jobs" | "ai-coach";
 
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
@@ -132,6 +133,7 @@ function AuthedApp({ session }: { session: Session }) {
             {(screen === "pipeline" || isAddOpen) && <Pipeline onNavigate={navigate} />}
             {screen === "applications" && <ApplicationsTable onNavigate={navigate} />}
             {screen === "detail" && <ApplicationDetail appId={detailId} onNavigate={navigate} />}
+            {screen === "jobs" && <Jobs onNavigate={navigate} />}
             {screen === "ai-coach" && <AiCoach userId={session.user.id} />}
             {screen === "networking" && <Networking onNavigate={navigate} focusContactId={focusId} onFocusHandled={() => setFocusId("")} />}
             {screen === "calendar" && <Calendar onNavigate={navigate} focusEventId={focusId} onFocusHandled={() => setFocusId("")} />}

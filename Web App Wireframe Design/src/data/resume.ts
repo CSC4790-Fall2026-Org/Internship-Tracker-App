@@ -60,7 +60,7 @@ export async function uploadAndParseResume(
 }
 
 /** invoke() reports only "non-2xx status code"; the real reason is in the response body. */
-async function functionErrorMessage(error: { message: string }): Promise<string> {
+export async function functionErrorMessage(error: { message: string }): Promise<string> {
   const res = (error as { context?: Response }).context;
   if (res instanceof Response) {
     const body = await res.json().catch(() => null);
