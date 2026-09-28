@@ -163,7 +163,7 @@ export default function Login() {
             {tab === "signin" ? "Welcome back" : "Get started for free"}
           </h2>
           <p style={{ fontFamily: "var(--font-body)", fontSize: "0.875rem", color: "var(--muted-foreground)" }}>
-            {tab === "signin" ? "Sign in to your Pipeline account" : "No credit card required"}
+            {tab === "signin" ? "Sign in to your Pipeline account" : "Start tracking your applications in one place"}
           </p>
         </div>
 
