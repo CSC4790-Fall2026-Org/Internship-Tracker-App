@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Application, AppStatus } from "../data/types";
 import { useData } from "../data/DataContext";
 import { toDate } from "../data/dates";
 import SankeyDiagram from "../components/SankeyDiagram";
+import Confetti from "../components/Confetti";
 
 const STATUS_COLUMNS: { id: AppStatus; label: string; color: string; bg: string }[] = [
   { id: "wishlist", label: "Wishlist", color: "#64748B", bg: "#F1F5F9" },
@@ -59,7 +60,31 @@ function PipelineVisualization({ applications }: { applications: Application[] }
 
 export default function Pipeline({ onNavigate }: PipelineProps) {
   const [view, setView] = useState<"board" | "visualization">("board");
-  const { applications } = useData();
+  const { applications, updateApplication } = useData();
+  // The browser only exposes drag data on drop, so the card being dragged is tracked here.
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [overColumn, setOverColumn] = useState<AppStatus | null>(null);
+  const [moveError, setMoveError] = useState<string | null>(null);
+  // Set when a card is dropped on Offer. `id` restarts the effect if it happens twice in a row.
+  const [celebration, setCelebration] = useState<{ id: number; x: number; y: number; company: string } | null>(null);
+
+  useEffect(() => {
+    if (!celebration) return;
+    const timer = setTimeout(() => setCelebration(null), 3500);
+    return () => clearTimeout(timer);
+  }, [celebration?.id]);
+
+  const moveTo = async (appId: string, status: AppStatus) => {
+    const app = applications.find((a) => a.id === appId);
+    if (!app || app.status === status) return;
+    setMoveError(null);
+    try {
+      await updateApplication(appId, { status });
+    } catch (e) {
+      setMoveError(`Couldn't move ${app.company}: ${(e as Error).message}`);
+      setCelebration(null); // don't keep celebrating an offer that didn't save
+    }
+  };
 
   return (
     <div className="max-w-[1400px] mx-auto px-6 py-8">
@@ -70,6 +95,7 @@ export default function Pipeline({ onNavigate }: PipelineProps) {
           </h1>
           <p style={{ fontFamily: "var(--font-body)", fontSize: "0.8125rem", color: "var(--muted-foreground)", marginTop: "2px" }}>
             {applications.length} total · {applications.filter((a) => a.status !== "rejected").length} active
+            {view === "board" && applications.length > 0 && " · Drag cards between columns to update their status"}
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -114,12 +140,54 @@ export default function Pipeline({ onNavigate }: PipelineProps) {
         </div>
       </div>
 
+      {view === "board" && moveError && (
+        <div role="alert" style={{ background: "#FEE2E2", color: "#B91C1C", border: "1px solid #FCA5A5", borderRadius: "8px", padding: "8px 12px", fontFamily: "var(--font-body)", fontSize: "0.8rem", marginBottom: "12px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span>{moveError}</span>
+          <button onClick={() => setMoveError(null)} style={{ background: "none", border: "none", color: "#B91C1C", fontWeight: 600, cursor: "pointer" }}>
+            Dismiss
+          </button>
+        </div>
+      )}
+
       {view === "board" && (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: "12px", minHeight: "calc(100vh - 220px)" }}>
           {STATUS_COLUMNS.map((col) => {
             const colApps = applications.filter((a) => a.status === col.id);
+            const dragSource = applications.find((a) => a.id === draggingId);
+            const isDropTarget = overColumn === col.id && !!dragSource && dragSource.status !== col.id;
             return (
-              <div key={col.id} style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              <div
+                key={col.id}
+                // The whole column accepts drops, not just the cards, so empty columns work too.
+                onDragOver={(e) => {
+                  if (!draggingId) return; // ignore files or text dragged in from elsewhere
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = "move";
+                  if (overColumn !== col.id) setOverColumn(col.id);
+                }}
+                onDragLeave={(e) => {
+                  // dragleave also fires when moving onto a child element; only clear when truly leaving.
+                  if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOverColumn((c) => (c === col.id ? null : c));
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  const id = draggingId ?? e.dataTransfer.getData("text/plain");
+                  setOverColumn(null);
+                  setDraggingId(null);
+                  if (!id) return;
+                  const app = applications.find((a) => a.id === id);
+                  if (col.id === "offer" && app && app.status !== "offer") {
+                    setCelebration({ id: Date.now(), x: e.clientX, y: e.clientY, company: app.company });
+                  }
+                  moveTo(id, col.id);
+                }}
+                style={{
+                  display: "flex", flexDirection: "column", gap: "8px", borderRadius: "10px", padding: "4px",
+                  margin: "-4px", transition: "background 0.12s, box-shadow 0.12s",
+                  background: isDropTarget ? col.bg : "transparent",
+                  boxShadow: isDropTarget ? `inset 0 0 0 2px ${col.color}66` : "none",
+                }}
+              >
                 <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 10px", borderRadius: "8px", background: col.bg, border: `1px solid ${col.color}33` }}>
                   <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: col.color, display: "inline-block", flexShrink: 0 }} />
                   <span style={{ fontFamily: "var(--font-body)", fontWeight: 600, fontSize: "0.8rem", color: col.color, flex: 1 }}>{col.label}</span>
@@ -129,7 +197,18 @@ export default function Pipeline({ onNavigate }: PipelineProps) {
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
                   {colApps.map((app) => (
-                    <KanbanCard key={app.id} app={app} colColor={col.color} onNavigate={onNavigate} />
+                    <KanbanCard
+                      key={app.id}
+                      app={app}
+                      colColor={col.color}
+                      onNavigate={onNavigate}
+                      isDragging={draggingId === app.id}
+                      onDragStart={() => setDraggingId(app.id)}
+                      onDragEnd={() => {
+                        setDraggingId(null);
+                        setOverColumn(null);
+                      }}
+                    />
                   ))}
                 </div>
                 <button
@@ -147,15 +226,67 @@ export default function Pipeline({ onNavigate }: PipelineProps) {
       )}
 
       {view === "visualization" && <PipelineVisualization applications={applications} />}
+
+      {celebration && (
+        <>
+          {!prefersReducedMotion() && <Confetti key={celebration.id} x={celebration.x} y={celebration.y} />}
+          <div
+            role="status"
+            style={{
+              position: "fixed", bottom: "28px", left: "50%", transform: "translateX(-50%)", zIndex: 201,
+              background: "#059669", color: "white", borderRadius: "12px", padding: "12px 20px",
+              boxShadow: "0 10px 30px rgba(5, 150, 105, 0.35)", fontFamily: "var(--font-body)",
+              fontSize: "0.875rem", fontWeight: 600, display: "flex", alignItems: "center", gap: "10px",
+            }}
+          >
+            <span style={{ fontSize: "1.25rem" }} aria-hidden="true">🎉</span>
+            Congrats on the offer from {celebration.company}!
+          </div>
+        </>
+      )}
     </div>
   );
 }
 
-function KanbanCard({ app, colColor, onNavigate }: { app: Application; colColor: string; onNavigate: (s: string, id?: string) => void }) {
+// Respect the OS setting for people who find motion uncomfortable; they still get the message.
+function prefersReducedMotion() {
+  return typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+}
+
+function KanbanCard({
+  app,
+  colColor,
+  onNavigate,
+  isDragging,
+  onDragStart,
+  onDragEnd,
+}: {
+  app: Application;
+  colColor: string;
+  onNavigate: (s: string, id?: string) => void;
+  isDragging: boolean;
+  onDragStart: () => void;
+  onDragEnd: () => void;
+}) {
   return (
     <div
+      draggable
+      onDragStart={(e) => {
+        // Firefox won't start a drag unless some data is set.
+        e.dataTransfer.setData("text/plain", app.id);
+        e.dataTransfer.effectAllowed = "move";
+        onDragStart();
+      }}
+      onDragEnd={(e) => {
+        // mouseleave doesn't fire during a drag, so undo the hover lift here.
+        const el = e.currentTarget as HTMLDivElement;
+        el.style.boxShadow = "none";
+        el.style.transform = "translateY(0)";
+        onDragEnd();
+      }}
       onClick={() => onNavigate("detail", app.id)}
-      style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: "10px", padding: "14px", cursor: "pointer", transition: "box-shadow 0.15s, transform 0.15s", borderLeft: `3px solid ${colColor}` }}
+      title="Click to open · drag to change status"
+      style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: "10px", padding: "14px", cursor: "pointer", transition: "box-shadow 0.15s, transform 0.15s, opacity 0.15s", borderLeft: `3px solid ${colColor}`, opacity: isDragging ? 0.4 : 1 }}
       onMouseEnter={(e) => { const el = e.currentTarget as HTMLDivElement; el.style.boxShadow = "0 4px 12px rgba(0,0,0,0.08)"; el.style.transform = "translateY(-1px)"; }}
       onMouseLeave={(e) => { const el = e.currentTarget as HTMLDivElement; el.style.boxShadow = "none"; el.style.transform = "translateY(0)"; }}
     >

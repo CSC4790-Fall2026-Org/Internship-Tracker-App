@@ -251,13 +251,20 @@ export function DataProvider({ children }: { children: ReactNode }) {
         return data!.id;
       },
 
-      updateApplication: (id, patch) => {
+      updateApplication: async (id, patch) => {
         const update: TablesUpdate<"applications"> = { ...patch };
         const current = appRows.find((r) => r.id === id);
         if (patch.status && patch.status !== "wishlist" && current && !current.applied_date) {
           update.applied_date = todayISO();
         }
-        return mutate(() => supabase.from("applications").update(update).eq("id", id));
+        // Optimistic so a card dropped on the Board lands in its new column instantly
+        setAppRows((rows) => rows.map((r) => (r.id === id ? { ...r, ...update } : r)));
+        try {
+          await mutate(() => supabase.from("applications").update(update).eq("id", id));
+        } catch (e) {
+          await refresh(); // put back what is actually saved
+          throw e;
+        }
       },
 
       deleteApplications: (ids) => mutate(() => supabase.from("applications").delete().in("id", ids)),
