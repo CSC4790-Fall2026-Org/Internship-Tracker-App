@@ -104,12 +104,12 @@ export default function Login() {
             Deadlines, interviews, and follow-ups in one place — so your job search doesn't live in a spreadsheet and three different browser tabs.
           </p>
 
-          {/* Stats — real numbers, no decoration */}
+          {/* Features */}
           <div style={{ display: "flex", gap: "40px" }}>
             {[
-              { value: "2.4k+", label: "students using Pipeline" },
-              { value: "18k+", label: "applications tracked" },
-              { value: "94%", label: "hit their top deadlines" },
+              { value: "Pipeline", label: "drag applications between stages" },
+              { value: "Calendar", label: "deadlines and interviews at a glance" },
+              { value: "Jobs", label: "search live internship listings" },
             ].map((s) => (
               <div key={s.label}>
                 <p style={{ fontFamily: "var(--font-heading)", fontSize: "1.625rem", fontWeight: 700, color: "white", letterSpacing: "-0.02em", marginBottom: "2px" }}>
@@ -123,20 +123,14 @@ export default function Login() {
           </div>
         </div>
 
-        {/* Testimonial */}
+        {/* Project note */}
         <div style={{ borderTop: "1px solid rgba(255,255,255,0.1)", paddingTop: "28px" }}>
-          <p style={{ fontFamily: "var(--font-body)", fontSize: "0.9rem", color: "rgba(255,255,255,0.75)", lineHeight: 1.65, marginBottom: "16px", fontStyle: "italic" }}>
-            "I had 40+ applications open during recruiting season. Pipeline kept me from missing a single deadline."
+          <p style={{ fontFamily: "var(--font-body)", fontWeight: 600, fontSize: "0.8125rem", color: "white", marginBottom: "4px" }}>
+            Built by students, for students
           </p>
-          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            <div style={{ width: "32px", height: "32px", borderRadius: "50%", background: "#1D4ED8", border: "1px solid rgba(255,255,255,0.15)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: "0.6875rem", color: "white" }}>
-              AK
-            </div>
-            <div>
-              <p style={{ fontFamily: "var(--font-body)", fontWeight: 600, fontSize: "0.8125rem", color: "white" }}>Anika Kapoor</p>
-              <p style={{ fontFamily: "var(--font-body)", fontSize: "0.75rem", color: "rgba(255,255,255,0.45)" }}>CS Junior · Offer from Stripe</p>
-            </div>
-          </div>
+          <p style={{ fontFamily: "var(--font-body)", fontSize: "0.8125rem", color: "rgba(255,255,255,0.55)", lineHeight: 1.6, maxWidth: "380px" }}>
+            Pipeline is a student project that's still in active development. Expect new features and the occasional rough edge.
+          </p>
         </div>
       </div>
 
