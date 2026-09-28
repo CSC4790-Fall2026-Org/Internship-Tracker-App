@@ -3,6 +3,7 @@ import { supabase } from "../lib/supabase";
 import type { Tables, TablesUpdate } from "../lib/database.types";
 import type { Application, AppStatus, CalendarEvent, Contact, Task } from "./types";
 import { timeAgo, todayISO } from "./dates";
+import type { ImportedApplication } from "./csv";
 
 type ApplicationRow = Tables<"applications"> & {
   interview_stages: Tables<"interview_stages">[];
@@ -59,6 +60,7 @@ interface DataContextValue {
   error: string | null;
   refresh: () => Promise<void>;
   addApplication: (input: NewApplication) => Promise<string>;
+  importApplications: (rows: ImportedApplication[]) => Promise<void>;
   updateApplication: (id: string, patch: Partial<Pick<Application, "status" | "notes">>) => Promise<void>;
   deleteApplications: (ids: string[]) => Promise<void>;
   addInterviewStage: (applicationId: string, stage: { name: string; date: string; notes: string }) => Promise<void>;
@@ -250,6 +252,24 @@ export function DataProvider({ children }: { children: ReactNode }) {
         await refresh();
         return data!.id;
       },
+
+      importApplications: (rows) =>
+        mutate(() =>
+          supabase.from("applications").insert(
+            rows.map((r) => ({
+              company: r.company,
+              position: r.position,
+              status: r.status,
+              job_url: r.jobUrl,
+              deadline: r.deadline || null,
+              applied_date: r.appliedDate || null,
+              location: r.location,
+              salary: r.salary,
+              notes: r.notes,
+              ...logoFor(r.company),
+            })),
+          ),
+        ),
 
       updateApplication: async (id, patch) => {
         const update: TablesUpdate<"applications"> = { ...patch };

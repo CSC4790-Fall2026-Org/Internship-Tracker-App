@@ -1,7 +1,9 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import type { AppStatus } from "../data/types";
 import { useData } from "../data/DataContext";
 import { toDate } from "../data/dates";
+import { applicationsToCsv, csvToApplications, downloadCsv, exportFilename } from "../data/csv";
+import { roleKey } from "../data/jobs";
 
 const STATUS_META: Record<AppStatus, { label: string; color: string; bg: string }> = {
   wishlist:     { label: "Wishlist",      color: "#64748B", bg: "#F1F5F9" },
@@ -18,8 +20,10 @@ interface ApplicationsTableProps {
 }
 
 export default function ApplicationsTable({ onNavigate }: ApplicationsTableProps) {
-  const { applications, deleteApplications } = useData();
+  const { applications, deleteApplications, importApplications } = useData();
   const [deleting, setDeleting] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [sortField, setSortField] = useState<SortField>("deadline");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [filterStatus, setFilterStatus] = useState<AppStatus | "all">("all");
@@ -62,6 +66,46 @@ export default function ApplicationsTable({ onNavigate }: ApplicationsTableProps
       alert(`Couldn't delete: ${(e as Error).message}`);
     } finally {
       setDeleting(false);
+    }
+  };
+
+  // Exports the selection if there is one, otherwise whatever the current filters show.
+  const handleExport = () => {
+    const rows = selectedIds.size > 0 ? filtered.filter((a) => selectedIds.has(a.id)) : filtered;
+    downloadCsv(applicationsToCsv(rows), exportFilename());
+  };
+
+  const handleImport = async (file: File) => {
+    const { rows, skipped, ignoredColumns } = csvToApplications(await file.text());
+    const existing = new Set(applications.map((a) => roleKey(a.company, a.position)));
+    const seen = new Set<string>();
+    const fresh = rows.filter((r) => {
+      const key = roleKey(r.company, r.position);
+      if (existing.has(key) || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    const duplicates = rows.length - fresh.length;
+
+    const details = [
+      skipped > 0 && `${skipped} row${skipped === 1 ? "" : "s"} skipped (missing company or position)`,
+      duplicates > 0 && `${duplicates} already tracked, skipped`,
+      ignoredColumns.length > 0 && `Columns not imported: ${ignoredColumns.join(", ")}`,
+    ].filter(Boolean).join("\n");
+
+    if (fresh.length === 0) {
+      alert(`No new applications found in ${file.name}.${details ? "\n\n" + details : ""}\n\nThe file needs a header row with at least Company and Position columns.`);
+      return;
+    }
+    if (!confirm(`Import ${fresh.length} application${fresh.length === 1 ? "" : "s"} from ${file.name}?${details ? "\n\n" + details : ""}`)) return;
+
+    setImporting(true);
+    try {
+      await importApplications(fresh);
+    } catch (e) {
+      alert(`Couldn't import: ${(e as Error).message}`);
+    } finally {
+      setImporting(false);
     }
   };
 
@@ -137,14 +181,38 @@ export default function ApplicationsTable({ onNavigate }: ApplicationsTableProps
               {deleting ? "Deleting…" : `Delete ${selectedIds.size}`}
             </button>
           )}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".csv,text/csv"
+            style={{ display: "none" }}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              e.target.value = ""; // so picking the same file again still fires onChange
+              if (file) handleImport(file);
+            }}
+          />
           <button
-            style={{ background: "var(--muted)", border: "1px solid var(--border)", borderRadius: "7px", padding: "7px 12px", fontFamily: "var(--font-body)", fontSize: "0.8rem", color: "var(--muted-foreground)", cursor: "pointer", display: "flex", alignItems: "center", gap: "5px" }}
+            onClick={() => fileInputRef.current?.click()}
+            disabled={importing}
+            style={{ opacity: importing ? 0.6 : 1, background: "var(--muted)", border: "1px solid var(--border)", borderRadius: "7px", padding: "7px 12px", fontFamily: "var(--font-body)", fontSize: "0.8rem", color: "var(--muted-foreground)", cursor: "pointer", display: "flex", alignItems: "center", gap: "5px" }}
           >
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-              <path d="M2 4h8M2 8h6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-              <path d="M9 6l2 2-2 2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M6 8V2M3.5 5.5L6 8l2.5-2.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M2 10h8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
             </svg>
-            Export CSV
+            {importing ? "Importing…" : "Import CSV"}
+          </button>
+          <button
+            onClick={handleExport}
+            disabled={filtered.length === 0}
+            style={{ opacity: filtered.length === 0 ? 0.6 : 1, background: "var(--muted)", border: "1px solid var(--border)", borderRadius: "7px", padding: "7px 12px", fontFamily: "var(--font-body)", fontSize: "0.8rem", color: "var(--muted-foreground)", cursor: "pointer", display: "flex", alignItems: "center", gap: "5px" }}
+          >
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+              <path d="M6 2v6M3.5 4.5L6 2l2.5 2.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M2 10h8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+            </svg>
+            {selectedIds.size > 0 ? `Export ${selectedIds.size}` : "Export CSV"}
           </button>
           <button
             onClick={() => onNavigate("add")}
