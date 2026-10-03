@@ -1,17 +1,21 @@
 import { useEffect, useMemo, useState } from "react";
 import { logoFor, useData } from "../data/DataContext";
 import type { Application, AppStatus } from "../data/types";
-import { fetchResumeProfile, type ResumeProfile } from "../data/resume";
+import { fetchResumeProfile, saveJobType, type ResumeProfile } from "../data/resume";
 import {
   fetchRecommendations,
   formatSalary,
   generateRecommendations,
+  JOB_TYPE_LABEL,
+  MAX_SEARCHES,
   roleKey,
   searchJobs,
   type JobListing,
   type JobRecommendation,
   type JobSearch,
+  type JobType,
   type Recommendations,
+  type SavedSearch,
 } from "../data/jobs";
 import { timeAgo } from "../data/dates";
 
@@ -56,7 +60,7 @@ export default function Jobs({ onNavigate }: { onNavigate: (screen: string, id?:
   const [recsError, setRecsError] = useState<string | null>(null);
 
   const [browse, setBrowse] = useState<BrowseState | null>(browseCache);
-  const [form, setForm] = useState<JobSearch>(browseCache?.search ?? { what: "intern", where: "", sort: "relevance" });
+  const [form, setForm] = useState<JobSearch>(browseCache?.search ?? { what: "intern", where: "", sort: "relevance", jobType: "auto" });
   const [searching, setSearching] = useState(false);
   const [browseError, setBrowseError] = useState<string | null>(null);
 
@@ -75,16 +79,31 @@ export default function Jobs({ onNavigate }: { onNavigate: (screen: string, id?:
     [applications],
   );
 
-  const generate = async () => {
+  const generate = async (searches?: SavedSearch[]) => {
     setGenerating(true);
     setRecsError(null);
     try {
-      setRecs(await generateRecommendations());
+      setRecs(await generateRecommendations(searches));
     } catch (e) {
       setRecsError((e as Error).message);
     } finally {
       setGenerating(false);
     }
+  };
+
+  // Saved to the profile so recommendations and Browse both start from it next time.
+  const changeJobType = async (jobType: JobType) => {
+    if (!profile || profile.job_type === jobType) return;
+    const previous = profile;
+    setProfile({ ...profile, job_type: jobType });
+    try {
+      await saveJobType(profile.id, jobType);
+    } catch (e) {
+      setProfile(previous);
+      setRecsError(`Couldn't save your preference: ${(e as Error).message}`);
+      return;
+    }
+    generate();
   };
 
   useEffect(() => {
@@ -122,11 +141,15 @@ export default function Jobs({ onNavigate }: { onNavigate: (screen: string, id?:
     }
   };
 
-  // Open Browse with internships near the user's first preferred location.
+  // Open Browse with the user's preferred job type near their first preferred location.
   useEffect(() => {
     if (tab !== "browse" || browse || searching || profile === undefined) return;
     const preferred = profile?.preferred_locations.find((l) => !/remote/i.test(l)) ?? "";
-    const initial: JobSearch = { what: "intern", where: preferred, sort: "relevance" };
+    const jobType = profile?.job_type ?? "auto";
+    // Reuse a role the AI already planned for this job type, rather than a blank keyword that matches everything.
+    const plannedRole = recs && recs.jobType === jobType ? recs.searches[0]?.what ?? "" : "";
+    const what = jobType === "auto" || jobType === "internship" ? plannedRole || "intern" : plannedRole;
+    const initial: JobSearch = { what, where: preferred, sort: "relevance", jobType };
     setForm(initial);
     runSearch(initial, 1);
   }, [tab, profile]);
@@ -218,6 +241,7 @@ export default function Jobs({ onNavigate }: { onNavigate: (screen: string, id?:
           generating={generating}
           error={recsError}
           onGenerate={generate}
+          onJobTypeChange={changeJobType}
           onNavigate={onNavigate}
           cardProps={cardProps}
         />
@@ -241,6 +265,15 @@ export default function Jobs({ onNavigate }: { onNavigate: (screen: string, id?:
               <option value="relevance">Most relevant</option>
               <option value="date">Newest</option>
             </select>
+            <select
+              value={form.jobType}
+              onChange={(e) => setForm({ ...form, jobType: e.target.value as JobType })}
+              style={{ ...inputStyle, width: "auto", paddingLeft: "10px", cursor: "pointer" }}
+            >
+              {(Object.keys(JOB_TYPE_LABEL) as JobType[]).map((t) => (
+                <option key={t} value={t}>{JOB_TYPE_LABEL[t]}</option>
+              ))}
+            </select>
             <button
               type="submit"
               disabled={searching}
@@ -254,7 +287,9 @@ export default function Jobs({ onNavigate }: { onNavigate: (screen: string, id?:
 
           {browse && (
             <ListHeader>
-              {browse.total.toLocaleString()} {browse.total === 1 ? "job" : "jobs"}
+              {browse.total.toLocaleString()}{" "}
+              {browse.search.jobType !== "auto" && JOB_TYPE_LABEL[browse.search.jobType].toLowerCase() + " "}
+              {browse.total === 1 ? "job" : "jobs"}
               {browse.search.what && <> for “{browse.search.what}”</>}
               {browse.search.where && <> near {browse.search.where}</>}
             </ListHeader>
@@ -301,6 +336,7 @@ function RecommendedView({
   generating,
   error,
   onGenerate,
+  onJobTypeChange,
   onNavigate,
   cardProps,
 }: {
@@ -308,7 +344,8 @@ function RecommendedView({
   recs: Recommendations | null;
   generating: boolean;
   error: string | null;
-  onGenerate: () => void;
+  onGenerate: (searches?: SavedSearch[]) => void;
+  onJobTypeChange: (jobType: JobType) => void;
   onNavigate: (screen: string, id?: string) => void;
   cardProps: (job: JobListing) => JobCardProps;
 }) {
@@ -327,19 +364,27 @@ function RecommendedView({
     );
   }
 
+  const picker = <JobTypePicker value={profile.job_type} disabled={generating} onChange={onJobTypeChange} />;
+
   if (generating) {
-    return <LoadingCard text="Reading your profile, searching listings and ranking the best fits. This can take up to 30 seconds." />;
+    return (
+      <>
+        {picker}
+        <LoadingCard text="Reading your profile, searching listings and ranking the best fits. This can take up to 30 seconds." />
+      </>
+    );
   }
 
   if (!recs) {
     return (
       <>
+        {picker}
         {error && <ErrorBanner text={error} />}
         <Panel>
           <PanelIcon />
           <PanelTitle>Find jobs that fit your resume</PanelTitle>
           <PanelText>We search current listings based on your profile, then pick the best fits and explain each one.</PanelText>
-          <button onClick={onGenerate} style={primaryButton}>
+          <button onClick={() => onGenerate()} style={primaryButton}>
             Find my matches
           </button>
         </Panel>
@@ -349,28 +394,10 @@ function RecommendedView({
 
   return (
     <>
+      {picker}
       {error && <ErrorBanner text={error} />}
-      <div
-        style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: "10px", padding: "10px 14px", marginBottom: "12px" }}
-        className="flex flex-wrap items-center gap-2"
-      >
-        <span style={{ fontFamily: "var(--font-body)", fontSize: "0.8rem", color: "var(--muted-foreground)" }}>Searched</span>
-        {recs.searches.map((s, i) => (
-          <span
-            key={i}
-            style={{ background: "var(--accent)", color: "var(--accent-foreground)", borderRadius: "100px", padding: "2px 10px", fontFamily: "var(--font-body)", fontSize: "0.75rem", fontWeight: 500 }}
-          >
-            {s.what}
-            {s.where && <span style={{ opacity: 0.7 }}> · {s.where}</span>}
-          </span>
-        ))}
-        <span style={{ fontFamily: "var(--font-body)", fontSize: "0.75rem", color: "var(--muted-foreground)", marginLeft: "auto" }}>
-          Updated {updatedLabel(recs.generatedAt)}
-        </span>
-        <button onClick={onGenerate} style={secondaryButton}>
-          Refresh
-        </button>
-      </div>
+      {/* Keyed so a new set of results resets any unsaved edits to the searches. */}
+      <SearchEditor key={recs.generatedAt} saved={recs.searches} generatedAt={recs.generatedAt} onRun={onGenerate} />
 
       {recs.jobs.length === 0 ? (
         <Panel>
@@ -393,6 +420,144 @@ function RecommendedView({
         </>
       )}
     </>
+  );
+}
+
+const sameSearchList = (a: SavedSearch[], b: SavedSearch[]) =>
+  a.length === b.length && a.every((s, i) => s.what === b[i].what && s.where === b[i].where);
+
+// The searches behind the current recommendations. Users can remove them or add their own, then re-run;
+// the AI still ranks whatever those searches return against the resume.
+function SearchEditor({ saved, generatedAt, onRun }: { saved: SavedSearch[]; generatedAt: string; onRun: (searches?: SavedSearch[]) => void }) {
+  const [draft, setDraft] = useState<SavedSearch[]>(saved);
+  const [adding, setAdding] = useState(false);
+  const [what, setWhat] = useState("");
+  const [where, setWhere] = useState("");
+  const changed = !sameSearchList(draft, saved);
+
+  const add = () => {
+    if (!what.trim()) return;
+    setDraft([...draft, { what: what.trim(), where: where.trim() }]);
+    setWhat("");
+    setWhere("");
+    setAdding(false);
+  };
+
+  const smallInput: React.CSSProperties = { ...inputStyle, paddingLeft: "10px", paddingTop: "4px", paddingBottom: "4px", fontSize: "0.75rem" };
+
+  return (
+    <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: "10px", padding: "10px 14px", marginBottom: "12px" }}>
+      <div className="flex flex-wrap items-center gap-2">
+        <span style={{ fontFamily: "var(--font-body)", fontSize: "0.8rem", color: "var(--muted-foreground)" }}>Searching</span>
+        {draft.map((s, i) => (
+          <span
+            key={`${s.what}|${s.where}|${i}`}
+            style={{ background: "var(--accent)", color: "var(--accent-foreground)", borderRadius: "100px", padding: "2px 4px 2px 10px", fontFamily: "var(--font-body)", fontSize: "0.75rem", fontWeight: 500, display: "inline-flex", alignItems: "center", gap: "4px" }}
+          >
+            {s.what}
+            {s.where && <span style={{ opacity: 0.7 }}> · {s.where}</span>}
+            <button
+              onClick={() => setDraft(draft.filter((_, j) => j !== i))}
+              title="Remove this search"
+              aria-label={`Remove ${s.what}`}
+              style={{ background: "none", border: "none", cursor: "pointer", color: "inherit", opacity: 0.6, padding: "0 4px", fontSize: "0.875rem", lineHeight: 1 }}
+            >
+              ×
+            </button>
+          </span>
+        ))}
+        {!adding && draft.length < MAX_SEARCHES && (
+          <button
+            onClick={() => setAdding(true)}
+            style={{ background: "none", border: "1px dashed var(--border)", borderRadius: "100px", padding: "2px 10px", fontFamily: "var(--font-body)", fontSize: "0.75rem", color: "var(--muted-foreground)", cursor: "pointer" }}
+          >
+            + Add search
+          </button>
+        )}
+        <span style={{ fontFamily: "var(--font-body)", fontSize: "0.75rem", color: "var(--muted-foreground)", marginLeft: "auto" }}>
+          Updated {updatedLabel(generatedAt)}
+        </span>
+        {changed ? (
+          <>
+            <button onClick={() => setDraft(saved)} style={secondaryButton}>
+              Undo
+            </button>
+            <button onClick={() => onRun(draft)} disabled={draft.length === 0} style={{ ...primaryButton, opacity: draft.length === 0 ? 0.6 : 1 }}>
+              Search these
+            </button>
+          </>
+        ) : (
+          <>
+            <button onClick={() => onRun()} title="Replace these with searches the AI picks from your resume" style={secondaryButton}>
+              Suggest from resume
+            </button>
+            <button onClick={() => onRun(saved)} style={secondaryButton}>
+              Refresh
+            </button>
+          </>
+        )}
+      </div>
+
+      {adding && (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            add();
+          }}
+          className="flex flex-wrap items-center gap-2"
+          style={{ marginTop: "10px" }}
+        >
+          <div style={{ flex: "2 1 200px" }}>
+            <input autoFocus value={what} onChange={(e) => setWhat(e.target.value)} placeholder="Role or keyword, e.g. backend engineer" style={smallInput} maxLength={80} />
+          </div>
+          <div style={{ flex: "1 1 140px" }}>
+            <input value={where} onChange={(e) => setWhere(e.target.value)} placeholder="City or state (optional)" style={smallInput} maxLength={80} />
+          </div>
+          <button type="submit" disabled={!what.trim()} style={{ ...primaryButton, padding: "5px 12px", fontSize: "0.75rem", opacity: what.trim() ? 1 : 0.6 }}>
+            Add
+          </button>
+          <button type="button" onClick={() => setAdding(false)} style={{ ...secondaryButton, padding: "4px 10px", fontSize: "0.75rem" }}>
+            Cancel
+          </button>
+        </form>
+      )}
+    </div>
+  );
+}
+
+const JOB_TYPE_HINT: Record<JobType, string> = {
+  auto: "Picks internships or full-time roles based on your graduation date",
+  internship: "Internships and co-ops",
+  new_grad: "Full-time entry-level roles, no internships or senior roles",
+  full_time: "Full-time roles, no internships",
+  part_time: "Part-time roles",
+};
+
+function JobTypePicker({ value, disabled, onChange }: { value: JobType; disabled: boolean; onChange: (jobType: JobType) => void }) {
+  return (
+    <div className="flex flex-wrap items-center gap-2" style={{ marginBottom: "12px" }}>
+      <span style={{ fontFamily: "var(--font-body)", fontSize: "0.8rem", color: "var(--muted-foreground)" }}>Looking for</span>
+      <div style={{ display: "flex", flexWrap: "wrap", background: "var(--muted)", border: "1px solid var(--border)", borderRadius: "9px", padding: "3px", gap: "2px" }}>
+        {(Object.keys(JOB_TYPE_LABEL) as JobType[]).map((t) => (
+          <button
+            key={t}
+            onClick={() => onChange(t)}
+            disabled={disabled}
+            title={JOB_TYPE_HINT[t]}
+            style={{
+              fontFamily: "var(--font-body)", fontSize: "0.75rem", fontWeight: value === t ? 600 : 450,
+              color: value === t ? "var(--foreground)" : "var(--muted-foreground)",
+              background: value === t ? "var(--card)" : "transparent",
+              boxShadow: value === t ? "0 1px 2px rgba(15, 23, 42, 0.08)" : "none",
+              border: "none", borderRadius: "7px", padding: "4px 11px",
+              cursor: disabled ? "not-allowed" : "pointer", opacity: disabled && value !== t ? 0.6 : 1,
+            }}
+          >
+            {t === "auto" ? "Auto" : JOB_TYPE_LABEL[t]}
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
 

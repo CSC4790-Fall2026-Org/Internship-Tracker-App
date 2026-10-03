@@ -101,7 +101,7 @@ export default function Login() {
             Track every application.<br />Miss nothing.
           </h1>
           <p style={{ fontFamily: "var(--font-body)", fontSize: "1rem", color: "rgba(255,255,255,0.6)", lineHeight: 1.65, maxWidth: "380px", marginBottom: "48px" }}>
-            Deadlines, interviews, and follow-ups in one place — so your job search doesn't live in a spreadsheet and three different browser tabs.
+            Deadlines, interviews, and follow-ups in one place, so your job search doesn't live in a spreadsheet and three different browser tabs.
           </p>
 
           {/* Features */}

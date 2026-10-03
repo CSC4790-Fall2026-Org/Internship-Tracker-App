@@ -28,22 +28,36 @@ export interface JobRecommendation extends JobListing {
 export interface Recommendations {
   jobs: JobRecommendation[];
   searches: { what: string; where: string }[];
+  jobType: JobType;
   generatedAt: string;
 }
 
 export type JobSort = "relevance" | "date";
 
+/** "auto" lets the AI pick internship vs. full-time from the graduation date. */
+export type JobType = "auto" | "internship" | "new_grad" | "full_time" | "part_time";
+
+export const JOB_TYPE_LABEL: Record<JobType, string> = {
+  auto: "Any type",
+  internship: "Internship",
+  new_grad: "New grad",
+  full_time: "Full-time",
+  part_time: "Part-time",
+};
+
 export interface JobSearch {
   what: string;
   where: string;
   sort: JobSort;
+  jobType: JobType;
 }
 
-function toRecommendations(row: { jobs: unknown; searches: unknown; generated_at: string }): Recommendations {
+function toRecommendations(row: { jobs: unknown; searches: unknown; job_type: string; generated_at: string }): Recommendations {
   // jsonb columns arrive as Json and need narrowing.
   return {
     jobs: (row.jobs as JobRecommendation[]) ?? [],
     searches: (row.searches as Recommendations["searches"]) ?? [],
+    jobType: row.job_type as JobType,
     generatedAt: row.generated_at,
   };
 }
@@ -60,14 +74,22 @@ export function searchJobs(search: JobSearch, page: number) {
 
 /** The saved set, without calling Adzuna or Groq. */
 export async function fetchRecommendations(): Promise<Recommendations | null> {
-  const { data, error } = await supabase.from("job_recommendations").select("jobs, searches, generated_at").maybeSingle();
+  const { data, error } = await supabase.from("job_recommendations").select("jobs, searches, job_type, generated_at").maybeSingle();
   if (error) throw new Error(error.message);
   return data ? toRecommendations(data) : null;
 }
 
-/** Runs a fresh search and ranking. Takes several seconds, and spends shared Adzuna quota. */
-export async function generateRecommendations(): Promise<Recommendations> {
-  const data = await invokeJobs<{ recommendations: { jobs: unknown; searches: unknown; generated_at: string } }>({ action: "recommend" });
+export type SavedSearch = Recommendations["searches"][number];
+
+/** At most this many searches per run; the server enforces it too. */
+export const MAX_SEARCHES = 5;
+
+/**
+ * Runs a fresh search and ranking. Takes several seconds, and spends shared Adzuna quota.
+ * Without `searches`, the AI plans them from the resume profile.
+ */
+export async function generateRecommendations(searches?: SavedSearch[]): Promise<Recommendations> {
+  const data = await invokeJobs<{ recommendations: { jobs: unknown; searches: unknown; job_type: string; generated_at: string } }>({ action: "recommend", searches });
   return toRecommendations(data.recommendations);
 }
 

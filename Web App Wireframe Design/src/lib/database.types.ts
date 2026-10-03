@@ -233,6 +233,7 @@ export type Database = {
           created_at: string
           generated_at: string
           id: string
+          job_type: string
           jobs: Json
           searches: Json
           updated_at: string
@@ -242,6 +243,7 @@ export type Database = {
           created_at?: string
           generated_at?: string
           id?: string
+          job_type?: string
           jobs?: Json
           searches?: Json
           updated_at?: string
@@ -251,6 +253,7 @@ export type Database = {
           created_at?: string
           generated_at?: string
           id?: string
+          job_type?: string
           jobs?: Json
           searches?: Json
           updated_at?: string
@@ -268,6 +271,7 @@ export type Database = {
           full_name: string
           graduation: string
           id: string
+          job_type: string
           interests: string[]
           major: string
           parsed_at: string | null
@@ -288,6 +292,7 @@ export type Database = {
           full_name?: string
           graduation?: string
           id?: string
+          job_type?: string
           interests?: string[]
           major?: string
           parsed_at?: string | null
@@ -308,6 +313,7 @@ export type Database = {
           full_name?: string
           graduation?: string
           id?: string
+          job_type?: string
           interests?: string[]
           major?: string
           parsed_at?: string | null

@@ -1,4 +1,5 @@
 import { supabase } from "../lib/supabase";
+import type { JobType } from "./jobs";
 
 export interface ExperienceItem {
   title: string;
@@ -21,12 +22,18 @@ export interface ResumeProfile {
   interests: string[];
   preferred_locations: string[];
   experience: ExperienceItem[];
+  job_type: JobType;
   parsed_at: string | null;
 }
 
 export type UploadStage = "uploading" | "analyzing";
 
 const MAX_BYTES = 5 * 1024 * 1024;
+
+export async function saveJobType(profileId: string, jobType: JobType) {
+  const { error } = await supabase.from("resume_profiles").update({ job_type: jobType }).eq("id", profileId);
+  if (error) throw new Error(error.message);
+}
 
 // experience is jsonb, so it arrives as Json and needs narrowing.
 export function toProfile(row: { experience: unknown }): ResumeProfile {

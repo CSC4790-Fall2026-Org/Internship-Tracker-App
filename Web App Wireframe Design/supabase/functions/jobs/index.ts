@@ -1,10 +1,13 @@
 // Backend for the Jobs page. Two actions:
 //   { action: "search", what, where, page, sort }  - browse Adzuna listings
-//   { action: "recommend" }                        - AI-picked listings based on the user's resume profile
+//   { action: "recommend", searches? }             - AI-picked listings based on the user's resume profile.
+//                                                    Without searches the AI plans them from the profile.
 //
 // Secrets (Edge Functions -> Secrets in the dashboard), never in the frontend bundle:
 //   ADZUNA_APP_ID, ADZUNA_APP_KEY  - from https://developer.adzuna.com
 //   GROQ_API_KEY                   - already set for parse-resume
+//
+// Job type: "search" takes a jobType in the body; "recommend" reads resume_profiles.job_type.
 //
 // Every user of the app shares one Adzuna quota (free tier: 25/min, 250/day, 2,500/month),
 // so recommendations are saved to job_recommendations and refreshes have a cooldown.
@@ -16,7 +19,10 @@ const ADZUNA_COUNTRY = "us";
 const PAGE_SIZE = 20;
 const MAX_CANDIDATES = 40;
 const MAX_RECOMMENDATIONS = 10;
+const MAX_SEARCHES = 5;
+// Re-running the same searches waits longer than running new ones, since the results barely change.
 const REFRESH_COOLDOWN_MINUTES = 10;
+const CHANGED_COOLDOWN_MINUTES = 1;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -42,6 +48,31 @@ interface Job {
 interface Search {
   what: string;
   where: string;
+}
+
+const JOB_TYPES = ["auto", "internship", "new_grad", "full_time", "part_time"] as const;
+type JobType = (typeof JOB_TYPES)[number];
+
+function toJobType(value: unknown): JobType {
+  return JOB_TYPES.includes(value as JobType) ? (value as JobType) : "auto";
+}
+
+const INTERN_WORDS = /\b(intern|interns|internship|internships|co-?op)\b/i;
+const SENIOR_WORDS = /\b(senior|sr|lead|principal|staff|manager|director|head|vp|architect)\b|\b(ii|iii|iv)\b/i;
+
+// Adzuna has a part-time flag but nothing for internships or experience level, so those use keywords
+// and a title check. (Adzuna's what_exclude can't do this: it matches the whole ad, and most
+// entry-level ads mention a "manager" or "senior engineers" somewhere.)
+function jobTypeQuery(jobType: JobType, what: string): { what: string; extra: Record<string, string> } {
+  if (jobType === "internship") return { what: INTERN_WORDS.test(what) ? what : `${what} intern`.trim(), extra: {} };
+  if (jobType === "part_time") return { what, extra: { part_time: "1" } };
+  return { what, extra: {} };
+}
+
+function fitsJobType(jobType: JobType, title: string) {
+  if (jobType === "auto" || jobType === "internship") return true;
+  if (INTERN_WORDS.test(title)) return false;
+  return jobType !== "new_grad" || !SENIOR_WORDS.test(title);
 }
 
 // The fields we use from an Adzuna result. Anything may be missing.
@@ -123,8 +154,10 @@ function roleKey(company: string, title: string) {
 
 async function adzunaSearch(
   credentials: { appId: string; appKey: string },
-  query: { what: string; where: string; page: number; sort: string; maxDaysOld?: number },
+  query: { what: string; where: string; page: number; sort: string; maxDaysOld?: number; jobType?: JobType },
 ): Promise<{ jobs: Job[]; total: number }> {
+  const jobType = query.jobType ?? "auto";
+  const { what, extra } = jobTypeQuery(jobType, query.what);
   const params = new URLSearchParams({
     app_id: credentials.appId,
     app_key: credentials.appKey,
@@ -132,7 +165,8 @@ async function adzunaSearch(
     sort_by: query.sort,
     "content-type": "application/json",
   });
-  if (query.what) params.set("what", query.what);
+  if (what) params.set("what", what);
+  for (const [key, value] of Object.entries(extra)) params.set(key, value);
   if (query.where) {
     params.set("where", query.where);
     params.set("distance", "40"); // km, roughly 25 miles
@@ -153,7 +187,7 @@ async function adzunaSearch(
   const body = await res.json();
   const results: AdzunaResult[] = Array.isArray(body.results) ? body.results : [];
   return {
-    jobs: results.map(toJob).filter((job) => job.id && job.url && job.title),
+    jobs: results.map(toJob).filter((job) => job.id && job.url && job.title && fitsJobType(jobType, job.title)),
     total: typeof body.count === "number" ? body.count : 0,
   };
 }
@@ -214,15 +248,32 @@ const SEARCH_PLAN_SCHEMA = {
   },
 };
 
-const SEARCH_PLAN_PROMPT = `You plan job searches for a student using a job board's keyword search.
+// What the user said they want. "auto" leaves it to the model, using the graduation date.
+const JOB_TYPE_RULE: Record<JobType, string> = {
+  auto: `- Decide between internships and full-time roles from the graduation date and today's date:
+  - Graduating more than about 6 months from today: search internships (include "intern" in "what").
+  - Graduating within about 6 months, or already graduated: search entry-level roles (e.g. "junior", "entry level", "new grad"). One internship search is fine as a fallback.`,
+  internship: `- The student wants internships. Include "intern" in every "what".`,
+  new_grad: `- The student wants full-time new grad / entry-level roles. Never include "intern". Phrases like "new grad", "entry level" or "junior" are good in "what", but plain role titles (e.g. "software engineer") are fine too.`,
+  full_time: `- The student wants full-time roles. Never include "intern". Use plain role titles; don't add seniority words.`,
+  part_time: `- The student wants part-time roles. Never include "intern". Use plain role titles.`,
+};
+
+const JOB_TYPE_LABEL: Record<JobType, string> = {
+  auto: "",
+  internship: "internships",
+  new_grad: "full-time new grad / entry-level roles",
+  full_time: "full-time roles",
+  part_time: "part-time roles",
+};
+
+const searchPlanPrompt = (jobType: JobType) => `You plan job searches for a student using a job board's keyword search.
 
 Write exactly 3 searches that together cover the most promising directions for this student.
 
 Rules:
 - "what" is 2 to 4 words that would appear in a job title. Short queries match more listings.
-- Decide between internships and full-time roles from the graduation date and today's date:
-  - Graduating more than about 6 months from today: search internships (include "intern" in "what").
-  - Graduating within about 6 months, or already graduated: search entry-level roles (e.g. "junior", "entry level", "new grad"). One internship search is fine as a fallback.
+${JOB_TYPE_RULE[jobType]}
 - "where" is one US city or state taken from the preferred locations. If there are none, or the preference is remote, use an empty string. For remote, add "remote" to "what" instead.
 - Make the 3 searches different from each other: different roles or different locations, not rewordings.`;
 
@@ -274,7 +325,7 @@ const RANKING_SCHEMA = {
   },
 };
 
-const RANKING_PROMPT = `You match a student to job listings and explain each match.
+const rankingPrompt = (jobType: JobType) => `You match a student to job listings and explain each match.
 
 From the listings provided, pick the ones that genuinely fit this student, best first, at most ${MAX_RECOMMENDATIONS}.
 
@@ -283,7 +334,9 @@ Rules:
 - Be honest. Leave out senior roles, roles demanding years of experience the student lacks, and roles in unrelated fields, even if that means returning fewer than ${MAX_RECOMMENDATIONS}.
 - Listing descriptions are short, truncated snippets. Don't claim details the snippet doesn't contain.
 - matched_skills must come from the student's profile, not the listing.
-- Only use ids from the listings provided, copied exactly.`;
+- Only use ids from the listings provided, copied exactly.${
+  jobType === "auto" ? "" : `\n- The student is looking for ${JOB_TYPE_LABEL[jobType]}. Leave out listings of any other kind.`
+}`;
 
 interface Ranked {
   id: string;
@@ -301,51 +354,84 @@ function interleave(lists: Job[][]) {
   return out;
 }
 
+function sameSearches(a: Search[], b: Search[] | null) {
+  const key = (list: Search[]) => list.map((s) => `${s.what.toLowerCase()}|${s.where.toLowerCase()}`).sort().join("\n");
+  return Array.isArray(b) && key(a) === key(b);
+}
+
+// Searches the user typed. Returns null when there are none, meaning "let the AI plan them".
+function toCustomSearches(value: unknown): Search[] | null {
+  if (!Array.isArray(value)) return null;
+  const searches = value
+    .filter((s): s is Search => typeof s?.what === "string" && typeof s?.where === "string")
+    .map((s) => ({ what: s.what.trim().slice(0, 80), where: s.where.trim().slice(0, 80) }))
+    .filter((s) => s.what);
+  if (searches.length > MAX_SEARCHES) throw new HttpError(400, `Use at most ${MAX_SEARCHES} searches.`);
+  return searches.length > 0 ? searches : null;
+}
+
 async function recommend(
   supabase: SupabaseClient,
   userId: string,
   credentials: { appId: string; appKey: string },
   groqKey: string,
+  customSearches: Search[] | null,
 ) {
-  const { data: existing } = await supabase
-    .from("job_recommendations")
-    .select("generated_at")
-    .eq("user_id", userId)
-    .maybeSingle();
-  if (existing) {
-    const minutesAgo = (Date.now() - new Date(existing.generated_at as string).getTime()) / 60_000;
-    if (minutesAgo < REFRESH_COOLDOWN_MINUTES) {
-      const wait = Math.ceil(REFRESH_COOLDOWN_MINUTES - minutesAgo);
-      throw new HttpError(429, `These were refreshed moments ago. You can refresh again in ${wait} minute${wait === 1 ? "" : "s"}.`);
-    }
-  }
-
   const { data: profileRow, error: profileError } = await supabase
     .from("resume_profiles")
-    .select("school, major, graduation, summary, skills, interests, preferred_locations, experience")
+    .select("school, major, graduation, summary, skills, interests, preferred_locations, experience, job_type")
     .eq("user_id", userId)
     .maybeSingle();
   if (profileError) throw new HttpError(500, `Couldn't read your profile: ${profileError.message}`);
   if (!profileRow) throw new HttpError(400, "Upload your resume on the Profile page first, so there's something to match against.");
   const profile = profileRow as unknown as Profile;
   profile.experience = Array.isArray(profile.experience) ? profile.experience : [];
+  const jobType = toJobType(profileRow.job_type);
 
-  const today = new Date().toISOString().slice(0, 10);
-  const plan = await groqJson<{ searches: Search[] }>(
-    groqKey,
-    "search_plan",
-    SEARCH_PLAN_SCHEMA,
-    SEARCH_PLAN_PROMPT,
-    `Today is ${today}.\n\n${profileText(profile)}`,
-  );
-  const searches = plan.searches
-    .map((s) => ({ what: s.what.trim().slice(0, 80), where: s.where.trim().slice(0, 80) }))
-    .filter((s) => s.what)
-    .slice(0, 3);
-  if (searches.length === 0) throw new HttpError(502, "Couldn't work out what to search for from your profile.");
+  const { data: existing } = await supabase
+    .from("job_recommendations")
+    .select("generated_at, job_type, searches")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (existing) {
+    // A new job type or edited searches is a new question, so it gets the short cooldown.
+    const repeat = existing.job_type === jobType && (!customSearches || sameSearches(customSearches, existing.searches as Search[]));
+    const cooldown = repeat ? REFRESH_COOLDOWN_MINUTES : CHANGED_COOLDOWN_MINUTES;
+    const minutesAgo = (Date.now() - new Date(existing.generated_at as string).getTime()) / 60_000;
+    if (minutesAgo < cooldown) {
+      const wait = Math.ceil(cooldown - minutesAgo);
+      throw new HttpError(
+        429,
+        repeat
+          ? `These searches were just run, so results won't have changed yet. Refresh again in ${wait} minute${wait === 1 ? "" : "s"}, or change the job type or searches to look for something different now.`
+          : `Recommendations were just updated. Try again in ${wait} minute${wait === 1 ? "" : "s"}.`,
+      );
+    }
+  }
+
+  let searches = customSearches;
+  if (!searches) {
+    const today = new Date().toISOString().slice(0, 10);
+    const plan = await groqJson<{ searches: Search[] }>(
+      groqKey,
+      "search_plan",
+      SEARCH_PLAN_SCHEMA,
+      searchPlanPrompt(jobType),
+      `Today is ${today}.\n\n${profileText(profile)}`,
+    );
+    searches = plan.searches
+      .map((s) => ({
+        // The model is told this, but enforce it: an "intern" keyword would undo the job type filter.
+        what: (jobType === "auto" || jobType === "internship" ? s.what : s.what.replace(INTERN_WORDS, " ")).replace(/\s+/g, " ").trim().slice(0, 80),
+        where: s.where.trim().slice(0, 80),
+      }))
+      .filter((s) => s.what)
+      .slice(0, 3);
+    if (searches.length === 0) throw new HttpError(502, "Couldn't work out what to search for from your profile.");
+  }
 
   const results = await Promise.all(
-    searches.map((s) => adzunaSearch(credentials, { ...s, page: 1, sort: "relevance", maxDaysOld: 30 })),
+    searches.map((s) => adzunaSearch(credentials, { ...s, page: 1, sort: "relevance", maxDaysOld: 30, jobType })),
   );
 
   // Skip roles the user already tracks; they don't need recommending.
@@ -379,7 +465,7 @@ async function recommend(
       groqKey,
       "job_ranking",
       RANKING_SCHEMA,
-      RANKING_PROMPT,
+      rankingPrompt(jobType),
       `Student profile:\n${profileText(profile)}\n\nListings (one JSON object per line):\n${listings}`,
     );
 
@@ -402,7 +488,7 @@ async function recommend(
   const { data: saved, error: saveError } = await supabase
     .from("job_recommendations")
     .upsert(
-      { user_id: userId, jobs, searches, generated_at: new Date().toISOString() },
+      { user_id: userId, jobs, searches, job_type: jobType, generated_at: new Date().toISOString() },
       { onConflict: "user_id" },
     )
     .select()
@@ -443,7 +529,8 @@ Deno.serve(async (req) => {
       const where = typeof body.where === "string" ? body.where.trim().slice(0, 100) : "";
       const page = Number.isInteger(body.page) && body.page >= 1 && body.page <= 50 ? body.page : 1;
       const sort = body.sort === "date" ? "date" : "relevance";
-      return jsonResponse(200, await adzunaSearch(credentials, { what, where, page, sort }));
+      const jobType = toJobType(body.jobType);
+      return jsonResponse(200, await adzunaSearch(credentials, { what, where, page, sort, jobType }));
     }
 
     if (body.action === "recommend") {
@@ -451,7 +538,7 @@ Deno.serve(async (req) => {
       if (!groqKey) {
         return jsonResponse(500, { error: "GROQ_API_KEY is not set. Add it under Edge Functions -> Secrets in the Supabase dashboard." });
       }
-      return jsonResponse(200, await recommend(supabase, auth.user.id, credentials, groqKey));
+      return jsonResponse(200, await recommend(supabase, auth.user.id, credentials, groqKey, toCustomSearches(body.searches)));
     }
 
     return jsonResponse(400, { error: 'Unknown action. Use "search" or "recommend".' });
