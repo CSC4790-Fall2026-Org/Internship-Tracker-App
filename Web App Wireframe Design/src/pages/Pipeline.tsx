@@ -86,7 +86,7 @@ export default function Pipeline({ onNavigate }: PipelineProps) {
 
       {view === "board" && (
         <div className="-mx-4 overflow-x-auto px-4 pb-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
-          <div className="grid min-w-max auto-cols-[minmax(216px,1fr)] grid-flow-col gap-2.5">
+          <div className="grid min-w-[1120px] auto-cols-[minmax(0,1fr)] grid-flow-col gap-2.5">
             {STATUS_ORDER.map((status) => {
               const cards = byStatus[status];
               const dragSource = applications.find((a) => a.id === draggingId);

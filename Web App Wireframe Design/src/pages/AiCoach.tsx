@@ -299,7 +299,7 @@ export default function AiCoach({ userId }: { userId: string }) {
       </div>
 
       {dirty && (
-        <div className="fixed inset-x-0 bottom-0 z-30 p-3 sm:p-4 lg:left-60">
+        <div className="fixed inset-x-0 bottom-0 z-30 p-3 sm:p-4 lg:left-[var(--sidebar-w)]">
           <div className="mx-auto flex max-w-xl items-center gap-3 rounded-xl border border-line bg-surface py-2 pr-2 pl-4 shadow-dialog animate-toast-in">
             <span className="size-2 rounded-full bg-warning" aria-hidden="true" />
             <p className="flex-1 text-ui font-medium text-fg">Unsaved changes</p>

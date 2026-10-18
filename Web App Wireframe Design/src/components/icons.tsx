@@ -184,3 +184,9 @@ export const IconFile = icon(<path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h1
 export const IconGraduation = icon(<path d="M22 10 12 5 2 10l10 5 10-5ZM6 12v5c3 3 9 3 12 0v-5M22 10v6" />);
 export const IconUndo = icon(<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8M3 3v5h5" />);
 export const IconCommand = icon(<path d="M15 6v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3" />);
+export const IconSidebar = icon(
+  <>
+    <rect x="3" y="3.5" width="18" height="17" rx="2.5" />
+    <path d="M9 3.5v17" />
+  </>,
+);

@@ -181,9 +181,9 @@ export function Checkbox({ indeterminate, className, ...rest }: Omit<ComponentPr
 
 // ---------- Layout ----------
 
-export function Page({ children, className, width = "default" }: { children: ReactNode; className?: string; width?: "default" | "narrow" | "wide" }) {
+export function Page({ children, className, width = "default" }: { children: ReactNode; className?: string; width?: "default" | "narrow" | "medium" | "wide" }) {
   return (
-    <div className={cx("mx-auto w-full px-4 pt-5 pb-16 sm:px-6 lg:px-8 lg:pt-8", width === "narrow" ? "max-w-[960px]" : width === "wide" ? "max-w-[1600px]" : "max-w-[1280px]", className)}>
+    <div className={cx("mx-auto w-full px-4 pt-5 pb-16 sm:px-6 lg:px-8 lg:pt-8", width === "narrow" ? "max-w-[960px]" : width === "medium" ? "max-w-[1120px]" : width === "wide" ? "max-w-[1600px]" : "max-w-[1280px]", className)}>
       {children}
     </div>
   );

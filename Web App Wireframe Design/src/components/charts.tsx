@@ -53,7 +53,7 @@ export function StatusDistribution({ applications, onSelect }: { applications: A
           ))}
         </div>
       </div>
-      <ul className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-5">
+      <ul className="mt-4 flex flex-wrap gap-x-6 gap-y-1">
         {rows.map((r) => (
           <li key={r.status}>
             <button
@@ -64,10 +64,10 @@ export function StatusDistribution({ applications, onSelect }: { applications: A
               onPointerLeave={() => setHover(null)}
               onFocus={() => r.count && setHover(r.status)}
               onBlur={() => setHover(null)}
-              className="-mx-1.5 flex w-full items-center gap-2 rounded-md px-1.5 py-1 text-left transition-colors enabled:hover:bg-muted"
+              className="-mx-1.5 flex items-center gap-2 rounded-md px-1.5 py-1 text-left transition-colors enabled:hover:bg-muted"
             >
               <StatusDot status={r.status} />
-              <span className="flex-1 truncate text-xs text-fg-muted">{STATUS[r.status].label}</span>
+              <span className="text-ui text-fg-muted">{STATUS[r.status].label}</span>
               <span className="text-ui font-medium text-fg tabular-nums">{r.count}</span>
             </button>
           </li>
