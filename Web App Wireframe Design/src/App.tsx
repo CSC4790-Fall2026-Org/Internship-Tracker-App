@@ -1,14 +1,18 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "./lib/supabase";
 import { DataProvider, useData } from "./data/DataContext";
-import NavBar from "./components/NavBar";
+import type { AppStatus } from "./data/types";
+import AppShell from "./components/NavBar";
+import { FeedbackProvider } from "./components/feedback";
+import { Banner, Button, Card, EmptyState, Page, Skeleton, Spinner } from "./components/ui";
+import { IconAlertCircle, IconRefresh } from "./components/icons";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Pipeline from "./pages/Pipeline";
 import ApplicationsTable from "./pages/ApplicationsTable";
 import ApplicationDetail from "./pages/ApplicationDetail";
-import AddApplication from "./pages/AddApplication";
+import ApplicationFormModal from "./pages/AddApplication";
 import AiCoach from "./pages/AiCoach";
 import SearchPalette from "./components/SearchPalette";
 import Calendar from "./pages/Calendar";
@@ -17,7 +21,44 @@ import Jobs from "./pages/Jobs";
 import Onboarding from "./pages/Onboarding";
 import { fetchResumeProfile } from "./data/resume";
 
-type Screen = "dashboard" | "pipeline" | "applications" | "detail" | "add" | "calendar" | "networking" | "jobs" | "ai-coach";
+type Screen = "dashboard" | "pipeline" | "applications" | "detail" | "calendar" | "networking" | "jobs" | "ai-coach";
+
+interface Route {
+  screen: Screen;
+  /** The application for "detail"; the status filter for "applications". */
+  id: string;
+}
+
+const TITLES: Record<Screen, string> = {
+  dashboard: "Dashboard",
+  pipeline: "Board",
+  applications: "Applications",
+  detail: "Application",
+  calendar: "Calendar",
+  networking: "Networking",
+  jobs: "Jobs",
+  "ai-coach": "Profile",
+};
+
+const SEGMENT: Partial<Record<Screen, string>> = { pipeline: "board", calendar: "calendar", networking: "networking", jobs: "jobs", "ai-coach": "profile" };
+
+// Screens live in the URL hash so the back button, refresh and shared links keep your place.
+// The hash is only read and written once signed in, after Supabase has consumed any auth tokens in the URL.
+function parseRoute(hash: string): Route {
+  const [path, query = ""] = hash.replace(/^#\/?/, "").split("?");
+  const [head, rest] = path.split("/");
+  if (head === "applications") {
+    return rest ? { screen: "detail", id: decodeURIComponent(rest) } : { screen: "applications", id: new URLSearchParams(query).get("status") ?? "" };
+  }
+  const screen = (Object.keys(SEGMENT) as Screen[]).find((s) => SEGMENT[s] === head);
+  return { screen: screen ?? "dashboard", id: "" };
+}
+
+function routeHash({ screen, id }: Route): string {
+  if (screen === "detail") return `#/applications/${encodeURIComponent(id)}`;
+  if (screen === "applications") return id ? `#/applications?status=${id}` : "#/applications";
+  return SEGMENT[screen] ? `#/${SEGMENT[screen]}` : "#/";
+}
 
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
@@ -32,7 +73,7 @@ export default function App() {
     return () => data.subscription.unsubscribe();
   }, []);
 
-  if (checkingSession) return <CenteredMessage text="Loading…" />;
+  if (checkingSession) return <FullScreenSpinner />;
   if (!session) return <Login />;
 
   // Keyed by user so switching accounts resets onboarding state and all loaded data
@@ -58,7 +99,7 @@ function SignedIn({ session }: { session: Session }) {
       .catch(() => setNeedsOnboarding(true));
   }, [session.user.id, session.user.user_metadata?.onboarded]);
 
-  if (needsOnboarding === null) return <CenteredMessage text="Loading…" />;
+  if (needsOnboarding === null) return <FullScreenSpinner />;
 
   if (needsOnboarding) {
     return (
@@ -74,9 +115,11 @@ function SignedIn({ session }: { session: Session }) {
   }
 
   return (
-    <DataProvider>
-      <AuthedApp session={session} />
-    </DataProvider>
+    <FeedbackProvider>
+      <DataProvider>
+        <AuthedApp session={session} />
+      </DataProvider>
+    </FeedbackProvider>
   );
 }
 
@@ -87,18 +130,45 @@ async function markOnboarded() {
 }
 
 function AuthedApp({ session }: { session: Session }) {
-  const { loading, error, refresh } = useData();
-  const [screen, setScreen] = useState<Screen>("dashboard");
-  const [detailId, setDetailId] = useState<string>("");
+  const { loading, error, refresh, applications, tasks, contacts, events } = useData();
+  // Nothing ever loaded: show the failure itself rather than an empty workspace that looks like a new account.
+  const loadFailed = !!error && applications.length + tasks.length + contacts.length + events.length === 0;
+  const [route, setRoute] = useState<Route>(() => parseRoute(window.location.hash));
   // Row to open once a screen mounts, e.g. jumping to one contact from search.
   const [focusId, setFocusId] = useState<string>("");
   const [searchOpen, setSearchOpen] = useState(false);
+  // The add form opens over whatever screen you're on; `status` pre-fills it, e.g. from a Board column.
+  const [adding, setAdding] = useState<{ status?: AppStatus } | null>(null);
 
-  const navigate = (newScreen: string, id?: string) => {
-    if (newScreen === "detail" && id) setDetailId(id);
-    setFocusId(newScreen === "networking" || newScreen === "calendar" ? id ?? "" : "");
-    setScreen(newScreen as Screen);
-  };
+  const navigate = useCallback((screen: string, id?: string) => {
+    if (screen === "add") {
+      setAdding({ status: id as AppStatus | undefined });
+      return;
+    }
+    const next: Route = { screen: screen as Screen, id: screen === "detail" || screen === "applications" ? id ?? "" : "" };
+    setFocusId(screen === "networking" || screen === "calendar" ? id ?? "" : "");
+    setRoute(next);
+    const hash = routeHash(next);
+    if (window.location.hash !== hash) window.history.pushState(null, "", hash);
+    window.scrollTo({ top: 0 });
+  }, []);
+
+  useEffect(() => {
+    const onPop = () => {
+      setRoute(parseRoute(window.location.hash));
+      setFocusId("");
+    };
+    window.addEventListener("popstate", onPop);
+    window.addEventListener("hashchange", onPop);
+    return () => {
+      window.removeEventListener("popstate", onPop);
+      window.removeEventListener("hashchange", onPop);
+    };
+  }, []);
+
+  useEffect(() => {
+    document.title = `${TITLES[route.screen]} · Pipeline`;
+  }, [route.screen]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -111,38 +181,63 @@ function AuthedApp({ session }: { session: Session }) {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  const isAddOpen = screen === "add";
+  const { screen, id } = route;
 
   return (
-    <div style={{ minHeight: "100%", background: "var(--background)" }}>
-      <NavBar activeScreen={screen} onNavigate={navigate} onLogout={() => supabase.auth.signOut()} userName={displayName(session)} onOpenSearch={() => setSearchOpen(true)} />
-      <main style={{ minHeight: "calc(100vh - 56px)" }}>
-        {error && (
-          <div style={{ maxWidth: "1400px", margin: "16px auto 0", padding: "0 24px" }}>
-            <div style={{ background: "#FEE2E2", color: "#B91C1C", border: "1px solid #FCA5A5", borderRadius: "8px", padding: "10px 14px", fontFamily: "var(--font-body)", fontSize: "0.8125rem", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span>Couldn't load your data: {error}</span>
-              <button onClick={() => refresh()} style={{ background: "none", border: "none", color: "#B91C1C", fontWeight: 600, cursor: "pointer", textDecoration: "underline" }}>Retry</button>
-            </div>
-          </div>
-        )}
-        {loading ? (
-          <CenteredMessage text="Loading your applications…" />
-        ) : (
-          <>
-            {screen === "dashboard" && <Dashboard onNavigate={navigate} userName={displayName(session)} />}
-            {(screen === "pipeline" || isAddOpen) && <Pipeline onNavigate={navigate} />}
-            {screen === "applications" && <ApplicationsTable onNavigate={navigate} />}
-            {screen === "detail" && <ApplicationDetail appId={detailId} onNavigate={navigate} />}
-            {screen === "jobs" && <Jobs onNavigate={navigate} />}
-            {screen === "ai-coach" && <AiCoach userId={session.user.id} />}
-            {screen === "networking" && <Networking onNavigate={navigate} focusContactId={focusId} onFocusHandled={() => setFocusId("")} />}
-            {screen === "calendar" && <Calendar onNavigate={navigate} focusEventId={focusId} onFocusHandled={() => setFocusId("")} />}
-          </>
-        )}
-      </main>
-      {isAddOpen && <AddApplication onNavigate={navigate} />}
+    <AppShell
+      activeScreen={screen}
+      onNavigate={navigate}
+      onLogout={() => supabase.auth.signOut()}
+      userName={displayName(session)}
+      userEmail={session.user.email ?? ""}
+      onOpenSearch={() => setSearchOpen(true)}
+    >
+      {loadFailed ? (
+        <Page>
+          <Card>
+            <EmptyState
+              icon={IconAlertCircle}
+              title="Couldn't load your workspace"
+              description={`${error.replace(/\.?$/, ".")} Check your connection and try again; nothing has been lost.`}
+              actions={
+                <Button variant="primary" icon={IconRefresh} onClick={() => refresh()}>
+                  Try again
+                </Button>
+              }
+            />
+          </Card>
+        </Page>
+      ) : error && (
+        <div className="mx-auto max-w-[1280px] px-4 pt-5 sm:px-6 lg:px-8">
+          <Banner
+            icon={IconAlertCircle}
+            action={
+              <Button size="sm" onClick={() => refresh()}>
+                Retry
+              </Button>
+            }
+          >
+            Couldn't load your data: {error}
+          </Banner>
+        </div>
+      )}
+      {loading ? (
+        <LoadingSkeleton />
+      ) : loadFailed ? null : (
+        <>
+          {screen === "dashboard" && <Dashboard onNavigate={navigate} userName={displayName(session)} />}
+          {screen === "pipeline" && <Pipeline onNavigate={navigate} />}
+          {screen === "applications" && <ApplicationsTable key={id} onNavigate={navigate} initialStatus={id} />}
+          {screen === "detail" && <ApplicationDetail key={id} appId={id} onNavigate={navigate} />}
+          {screen === "jobs" && <Jobs onNavigate={navigate} />}
+          {screen === "ai-coach" && <AiCoach userId={session.user.id} />}
+          {screen === "networking" && <Networking onNavigate={navigate} focusContactId={focusId} onFocusHandled={() => setFocusId("")} />}
+          {screen === "calendar" && <Calendar onNavigate={navigate} focusEventId={focusId} onFocusHandled={() => setFocusId("")} />}
+        </>
+      )}
+      {adding && <ApplicationFormModal initialStatus={adding.status} onClose={() => setAdding(null)} onSaved={(newId) => navigate("detail", newId)} />}
       {searchOpen && <SearchPalette onClose={() => setSearchOpen(false)} onNavigate={navigate} />}
-    </div>
+    </AppShell>
   );
 }
 
@@ -151,11 +246,26 @@ function displayName(session: Session) {
   return fullName?.trim() || session.user.email?.split("@")[0] || "there";
 }
 
-function CenteredMessage({ text }: { text: string }) {
+function FullScreenSpinner() {
   return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "calc(100vh - 56px)", fontFamily: "var(--font-body)", fontSize: "0.875rem", color: "var(--muted-foreground)" }}>
-      {text}
+    <div className="flex min-h-dvh items-center justify-center text-fg-faint" role="status" aria-label="Loading">
+      <Spinner size={20} />
     </div>
   );
 }
 
+function LoadingSkeleton() {
+  return (
+    <Page>
+      <div role="status" aria-label="Loading your applications">
+        <Skeleton className="mb-2 h-6 w-48" />
+        <Skeleton className="mb-8 h-4 w-72" />
+        <Skeleton className="mb-6 h-24 w-full rounded-card" />
+        <div className="grid gap-6 lg:grid-cols-3">
+          <Skeleton className="h-72 rounded-card lg:col-span-2" />
+          <Skeleton className="h-72 rounded-card" />
+        </div>
+      </div>
+    </Page>
+  );
+}

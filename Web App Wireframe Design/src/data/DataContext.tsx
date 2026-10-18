@@ -43,6 +43,9 @@ export interface ContactInput {
   notes: string;
 }
 
+/** Fields that can be edited after an application is created. */
+export type ApplicationPatch = Partial<Pick<Application, "status" | "notes" | "company" | "position" | "jobUrl" | "deadline" | "appliedDate" | "location" | "salary">>;
+
 export interface ActivityItem {
   id: string;
   text: string;
@@ -61,10 +64,11 @@ interface DataContextValue {
   refresh: () => Promise<void>;
   addApplication: (input: NewApplication) => Promise<string>;
   importApplications: (rows: ImportedApplication[]) => Promise<void>;
-  updateApplication: (id: string, patch: Partial<Pick<Application, "status" | "notes">>) => Promise<void>;
+  updateApplication: (id: string, patch: ApplicationPatch) => Promise<void>;
   deleteApplications: (ids: string[]) => Promise<void>;
   addInterviewStage: (applicationId: string, stage: { name: string; date: string; notes: string }) => Promise<void>;
   setStageCompleted: (stageId: string, completed: boolean) => Promise<void>;
+  deleteInterviewStage: (stageId: string) => Promise<void>;
   addContact: (contact: ContactInput, applicationIds?: string[]) => Promise<string>;
   updateContact: (id: string, patch: Partial<ContactInput>) => Promise<void>;
   deleteContact: (id: string) => Promise<void>;
@@ -73,8 +77,10 @@ interface DataContextValue {
   addEvent: (event: CalendarEventInput) => Promise<void>;
   updateEvent: (id: string, event: CalendarEventInput) => Promise<void>;
   deleteEvent: (id: string) => Promise<void>;
-  addTask: (task: { text: string; due: string; applicationId: string | null }) => Promise<void>;
+  /** Resolves to the new task's id. */
+  addTask: (task: { text: string; due: string; applicationId: string | null }) => Promise<string>;
   setTaskDone: (taskId: string, done: boolean) => Promise<void>;
+  deleteTask: (taskId: string) => Promise<void>;
 }
 
 const DataContext = createContext<DataContextValue | null>(null);
@@ -272,9 +278,19 @@ export function DataProvider({ children }: { children: ReactNode }) {
         ),
 
       updateApplication: async (id, patch) => {
-        const update: TablesUpdate<"applications"> = { ...patch };
+        const update: TablesUpdate<"applications"> = {
+          ...(patch.status !== undefined && { status: patch.status }),
+          ...(patch.notes !== undefined && { notes: patch.notes }),
+          ...(patch.company !== undefined && { company: patch.company.trim(), ...logoFor(patch.company) }),
+          ...(patch.position !== undefined && { position: patch.position.trim() }),
+          ...(patch.jobUrl !== undefined && { job_url: patch.jobUrl.trim() }),
+          ...(patch.deadline !== undefined && { deadline: patch.deadline || null }),
+          ...(patch.appliedDate !== undefined && { applied_date: patch.appliedDate || null }),
+          ...(patch.location !== undefined && { location: patch.location.trim() }),
+          ...(patch.salary !== undefined && { salary: patch.salary.trim() }),
+        };
         const current = appRows.find((r) => r.id === id);
-        if (patch.status && patch.status !== "wishlist" && current && !current.applied_date) {
+        if (patch.status && patch.status !== "wishlist" && current && !current.applied_date && !patch.appliedDate) {
           update.applied_date = todayISO();
         }
         // Optimistic so a card dropped on the Board lands in its new column instantly
@@ -295,6 +311,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
         ),
 
       setStageCompleted: (stageId, completed) => mutate(() => supabase.from("interview_stages").update({ completed }).eq("id", stageId)),
+
+      deleteInterviewStage: (stageId) => mutate(() => supabase.from("interview_stages").delete().eq("id", stageId)),
 
       addContact: async (contact, applicationIds = []) => {
         const { data } = check(
@@ -385,13 +403,32 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
       deleteEvent: (id) => mutate(() => supabase.from("calendar_events").delete().eq("id", id)),
 
-      addTask: (task) =>
-        mutate(() => supabase.from("tasks").insert({ text: task.text.trim(), due: task.due || null, application_id: task.applicationId })),
+      addTask: async (task) => {
+        const { data } = check(
+          await supabase
+            .from("tasks")
+            .insert({ text: task.text.trim(), due: task.due || null, application_id: task.applicationId })
+            .select("id")
+            .single(),
+        );
+        await refresh();
+        return data!.id;
+      },
 
       setTaskDone: async (taskId, done) => {
         // Optimistic so the checkbox responds instantly
         setTaskRows((rows) => rows.map((t) => (t.id === taskId ? { ...t, done } : t)));
         await mutate(() => supabase.from("tasks").update({ done }).eq("id", taskId));
+      },
+
+      deleteTask: async (taskId) => {
+        setTaskRows((rows) => rows.filter((t) => t.id !== taskId));
+        try {
+          await mutate(() => supabase.from("tasks").delete().eq("id", taskId));
+        } catch (e) {
+          await refresh();
+          throw e;
+        }
       },
     };
   }, [appRows, taskRows, contactRows, eventRows, loading, error, refresh, mutate]);

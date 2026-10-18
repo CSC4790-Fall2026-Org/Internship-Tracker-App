@@ -1,378 +1,200 @@
 import { useState } from "react";
-import type { AppStatus } from "../data/types";
-import { useData } from "../data/DataContext";
+import type { Application, AppStatus } from "../data/types";
+import { useData, type NewApplication } from "../data/DataContext";
+import { STATUS, STATUS_ORDER } from "../data/status";
+import { todayISO } from "../data/dates";
+import { Button, Field, Input, Textarea, StatusDot, cx } from "../components/ui";
+import { Modal } from "../components/overlay";
+import { useFeedback, errorMessage } from "../components/feedback";
+import { IconLink, IconMapPin, IconBanknote } from "../components/icons";
 
-interface AddApplicationProps {
-  onNavigate: (screen: string, id?: string) => void;
+interface ApplicationFormProps {
+  /** Present when editing; absent when adding. */
+  application?: Application;
+  initialStatus?: AppStatus;
+  onClose: () => void;
+  /** Called with the saved application's id. */
+  onSaved?: (id: string) => void;
 }
 
-export default function AddApplication({ onNavigate }: AddApplicationProps) {
-  const { addApplication } = useData();
+type FormState = NewApplication & { appliedDate: string };
+
+/** Adds a scheme so "acme.com/jobs" still opens as a link. */
+function normalizeUrl(url: string) {
+  const trimmed = url.trim();
+  if (!trimmed || /^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed)) return trimmed;
+  return `https://${trimmed}`;
+}
+
+export default function ApplicationFormModal({ application, initialStatus, onClose, onSaved }: ApplicationFormProps) {
+  const { addApplication, updateApplication } = useData();
+  const { toast } = useFeedback();
+  const editing = !!application;
+  const [form, setForm] = useState<FormState>(() => ({
+    company: application?.company ?? "",
+    position: application?.position ?? "",
+    jobUrl: application?.jobUrl ?? "",
+    deadline: application?.deadline ?? "",
+    status: application?.status ?? initialStatus ?? "wishlist",
+    location: application?.location ?? "",
+    salary: application?.salary ?? "",
+    notes: application?.notes ?? "",
+    appliedDate: application?.appliedDate ?? "",
+  }));
+  const [touched, setTouched] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [form, setForm] = useState({
-    company: "",
-    position: "",
-    jobUrl: "",
-    deadline: "",
-    status: "wishlist" as AppStatus,
-    location: "",
-    salary: "",
-    notes: "",
-  });
 
-  const handleChange = (field: string, value: string) => {
-    setForm((prev) => ({ ...prev, [field]: value }));
+  const set = <K extends keyof FormState>(field: K, value: FormState[K]) => setForm((f) => ({ ...f, [field]: value }));
+
+  const errors = {
+    company: form.company.trim() ? null : "Enter the company name.",
+    position: form.position.trim() ? null : "Enter the role you're applying for.",
   };
+  const invalid = !!(errors.company || errors.position);
 
-  const canSave = form.company.trim() !== "" && form.position.trim() !== "";
-
-  const handleSave = async () => {
-    if (!canSave) {
-      setError("Company and position are required.");
-      return;
-    }
+  const submit = async () => {
+    setTouched(true);
+    if (invalid || saving) return;
     setSaving(true);
     setError(null);
+    const payload = { ...form, jobUrl: normalizeUrl(form.jobUrl) };
     try {
-      const id = await addApplication(form);
-      onNavigate("detail", id);
+      if (application) {
+        await updateApplication(application.id, {
+          company: payload.company,
+          position: payload.position,
+          jobUrl: payload.jobUrl,
+          deadline: payload.deadline,
+          status: payload.status,
+          location: payload.location,
+          salary: payload.salary,
+          // Moving out of Wishlist without a date means "today"; moving back clears nothing.
+          appliedDate: payload.status !== "wishlist" && !payload.appliedDate ? todayISO() : payload.appliedDate,
+        });
+        toast("Changes saved");
+        onClose();
+        onSaved?.(application.id);
+      } else {
+        const id = await addApplication(payload);
+        toast(`Added ${payload.company.trim()}`);
+        onClose();
+        onSaved?.(id);
+      }
     } catch (e) {
-      setError((e as Error).message);
+      setError(errorMessage(e));
       setSaving(false);
     }
   };
 
-  const fieldStyle = {
-    width: "100%",
-    fontFamily: "var(--font-body)",
-    fontSize: "0.875rem",
-    color: "var(--foreground)",
-    background: "var(--muted)",
-    border: "1px solid var(--border)",
-    borderRadius: "8px",
-    padding: "9px 12px",
-    outline: "none",
-    transition: "border-color 0.15s, box-shadow 0.15s",
-    boxSizing: "border-box" as const,
-  };
-
-  const labelStyle = {
-    fontFamily: "var(--font-body)",
-    fontSize: "0.8rem",
-    fontWeight: 500,
-    color: "var(--foreground)",
-    display: "block",
-    marginBottom: "5px",
-  };
-
-  const STATUS_OPTIONS = [
-    { id: "wishlist", label: "Wishlist" },
-    { id: "applied", label: "Applied" },
-    { id: "interviewing", label: "Interviewing" },
-    { id: "offer", label: "Offer" },
-    { id: "rejected", label: "Closed" },
-  ];
+  const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
 
   return (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        background: "rgba(15, 23, 42, 0.45)",
-        zIndex: 100,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: "24px",
-      }}
-      onClick={(e) => { if (e.target === e.currentTarget) onNavigate("applications"); }}
+    <Modal
+      size="lg"
+      title={editing ? "Edit application" : "New application"}
+      description={editing ? `${application.company} · ${application.position}` : "Track a job or internship you're interested in."}
+      onClose={onClose}
+      dismissible={!saving}
+      footer={
+        <>
+          <span className="mr-auto hidden text-xs text-fg-muted sm:block">{isMac ? "⌘" : "Ctrl"} + Enter to save</span>
+          <Button onClick={onClose} disabled={saving}>
+            Cancel
+          </Button>
+          <Button variant="primary" onClick={submit} loading={saving}>
+            {editing ? "Save changes" : "Add application"}
+          </Button>
+        </>
+      }
     >
-      <div
-        style={{
-          background: "var(--card)",
-          borderRadius: "16px",
-          border: "1px solid var(--border)",
-          boxShadow: "0 20px 60px rgba(0,0,0,0.15)",
-          width: "100%",
-          maxWidth: "560px",
-          maxHeight: "90vh",
-          overflow: "auto",
+      <form
+        noValidate
+        onSubmit={(e) => {
+          e.preventDefault();
+          submit();
         }}
+        onKeyDown={(e) => {
+          if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+            e.preventDefault();
+            submit();
+          }
+        }}
+        className="space-y-5"
       >
-        {/* Modal header */}
-        <div
-          style={{
-            padding: "20px 24px 16px",
-            borderBottom: "1px solid var(--border)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            position: "sticky",
-            top: 0,
-            background: "var(--card)",
-            borderRadius: "16px 16px 0 0",
-            zIndex: 1,
-          }}
-        >
-          <div>
-            <h2
-              style={{
-                fontFamily: "var(--font-heading)",
-                fontSize: "1.125rem",
-                fontWeight: 700,
-                color: "var(--foreground)",
-                letterSpacing: "-0.01em",
-              }}
-            >
-              New Application
-            </h2>
-            <p style={{ fontFamily: "var(--font-body)", fontSize: "0.8rem", color: "var(--muted-foreground)", marginTop: "2px" }}>
-              Track a new job or internship opportunity
-            </p>
-          </div>
-          <button
-            onClick={() => onNavigate("applications")}
-            style={{
-              width: "32px",
-              height: "32px",
-              borderRadius: "8px",
-              background: "var(--muted)",
-              border: "1px solid var(--border)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              cursor: "pointer",
-              color: "var(--muted-foreground)",
-            }}
-          >
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-              <path d="M2 2l8 8M10 2L2 10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-            </svg>
-          </button>
+        {error && (
+          <p role="alert" className="rounded-md border border-danger-line bg-danger-soft px-3 py-2 text-ui text-danger-fg">
+            Couldn't save: {error}
+          </p>
+        )}
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Company" required error={touched ? errors.company : null}>
+            <Input data-autofocus value={form.company} onChange={(e) => set("company", e.target.value)} placeholder="e.g. Stripe" autoComplete="organization" />
+          </Field>
+          <Field label="Position" required error={touched ? errors.position : null}>
+            <Input value={form.position} onChange={(e) => set("position", e.target.value)} placeholder="e.g. Software Engineer Intern" />
+          </Field>
         </div>
 
-        {/* Form body */}
-        <div style={{ padding: "24px" }}>
-          {/* Company + Position */}
-          <div className="grid grid-cols-2 gap-4 mb-4">
-            <div>
-              <label style={labelStyle}>
-                Company <span style={{ color: "#EF4444" }}>*</span>
-              </label>
-              <input
-                type="text"
-                placeholder="e.g. Acme Corp"
-                value={form.company}
-                onChange={(e) => handleChange("company", e.target.value)}
-                style={fieldStyle}
-                onFocus={(e) => {
-                  (e.currentTarget as HTMLInputElement).style.borderColor = "var(--ring)";
-                  (e.currentTarget as HTMLInputElement).style.boxShadow = "0 0 0 3px var(--accent)";
-                }}
-                onBlur={(e) => {
-                  (e.currentTarget as HTMLInputElement).style.borderColor = "var(--border)";
-                  (e.currentTarget as HTMLInputElement).style.boxShadow = "none";
-                }}
-              />
-            </div>
-            <div>
-              <label style={labelStyle}>
-                Position <span style={{ color: "#EF4444" }}>*</span>
-              </label>
-              <input
-                type="text"
-                placeholder="e.g. Software Engineer Intern"
-                value={form.position}
-                onChange={(e) => handleChange("position", e.target.value)}
-                style={fieldStyle}
-                onFocus={(e) => {
-                  (e.currentTarget as HTMLInputElement).style.borderColor = "var(--ring)";
-                  (e.currentTarget as HTMLInputElement).style.boxShadow = "0 0 0 3px var(--accent)";
-                }}
-                onBlur={(e) => {
-                  (e.currentTarget as HTMLInputElement).style.borderColor = "var(--border)";
-                  (e.currentTarget as HTMLInputElement).style.boxShadow = "none";
-                }}
-              />
-            </div>
+        <fieldset>
+          <legend className="mb-1.5 text-ui font-medium text-fg-2">Stage</legend>
+          <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-5" role="radiogroup" aria-label="Stage">
+            {STATUS_ORDER.map((s) => {
+              const active = form.status === s;
+              return (
+                <button
+                  key={s}
+                  type="button"
+                  role="radio"
+                  aria-checked={active}
+                  title={STATUS[s].hint}
+                  onClick={() => set("status", s)}
+                  className={cx(
+                    "flex h-8 items-center gap-2 rounded-md border px-2.5 text-ui transition-[border-color,background-color,box-shadow]",
+                    active ? "border-fg bg-surface font-medium text-fg shadow-[0_0_0_1px_var(--color-fg)]" : "border-line bg-surface text-fg-2 hover:border-line-strong hover:bg-subtle",
+                  )}
+                >
+                  <StatusDot status={s} />
+                  {STATUS[s].label}
+                </button>
+              );
+            })}
           </div>
+        </fieldset>
 
-          {/* Job URL */}
-          <div className="mb-4">
-            <label style={labelStyle}>Job Posting URL</label>
-            <input
-              type="url"
-              placeholder="https://company.com/jobs/..."
-              value={form.jobUrl}
-              onChange={(e) => handleChange("jobUrl", e.target.value)}
-              style={fieldStyle}
-              onFocus={(e) => {
-                (e.currentTarget as HTMLInputElement).style.borderColor = "var(--ring)";
-                (e.currentTarget as HTMLInputElement).style.boxShadow = "0 0 0 3px var(--accent)";
-              }}
-              onBlur={(e) => {
-                (e.currentTarget as HTMLInputElement).style.borderColor = "var(--border)";
-                (e.currentTarget as HTMLInputElement).style.boxShadow = "none";
-              }}
-            />
-          </div>
-
-          {/* Deadline + Status */}
-          <div className="grid grid-cols-2 gap-4 mb-4">
-            <div>
-              <label style={labelStyle}>Application Deadline</label>
-              <input
-                type="date"
-                value={form.deadline}
-                onChange={(e) => handleChange("deadline", e.target.value)}
-                style={fieldStyle}
-                onFocus={(e) => {
-                  (e.currentTarget as HTMLInputElement).style.borderColor = "var(--ring)";
-                  (e.currentTarget as HTMLInputElement).style.boxShadow = "0 0 0 3px var(--accent)";
-                }}
-                onBlur={(e) => {
-                  (e.currentTarget as HTMLInputElement).style.borderColor = "var(--border)";
-                  (e.currentTarget as HTMLInputElement).style.boxShadow = "none";
-                }}
-              />
-            </div>
-            <div>
-              <label style={labelStyle}>Status</label>
-              <select
-                value={form.status}
-                onChange={(e) => handleChange("status", e.target.value)}
-                style={fieldStyle}
-                onFocus={(e) => {
-                  (e.currentTarget as HTMLSelectElement).style.borderColor = "var(--ring)";
-                  (e.currentTarget as HTMLSelectElement).style.boxShadow = "0 0 0 3px var(--accent)";
-                }}
-                onBlur={(e) => {
-                  (e.currentTarget as HTMLSelectElement).style.borderColor = "var(--border)";
-                  (e.currentTarget as HTMLSelectElement).style.boxShadow = "none";
-                }}
-              >
-                {STATUS_OPTIONS.map((s) => (
-                  <option key={s.id} value={s.id}>{s.label}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {/* Location + Salary */}
-          <div className="grid grid-cols-2 gap-4 mb-4">
-            <div>
-              <label style={labelStyle}>Location</label>
-              <input
-                type="text"
-                placeholder="e.g. San Francisco, CA (Hybrid)"
-                value={form.location}
-                onChange={(e) => handleChange("location", e.target.value)}
-                style={fieldStyle}
-                onFocus={(e) => {
-                  (e.currentTarget as HTMLInputElement).style.borderColor = "var(--ring)";
-                  (e.currentTarget as HTMLInputElement).style.boxShadow = "0 0 0 3px var(--accent)";
-                }}
-                onBlur={(e) => {
-                  (e.currentTarget as HTMLInputElement).style.borderColor = "var(--border)";
-                  (e.currentTarget as HTMLInputElement).style.boxShadow = "none";
-                }}
-              />
-            </div>
-            <div>
-              <label style={labelStyle}>Compensation</label>
-              <input
-                type="text"
-                placeholder="e.g. $42/hr or $85,000/yr"
-                value={form.salary}
-                onChange={(e) => handleChange("salary", e.target.value)}
-                style={fieldStyle}
-                onFocus={(e) => {
-                  (e.currentTarget as HTMLInputElement).style.borderColor = "var(--ring)";
-                  (e.currentTarget as HTMLInputElement).style.boxShadow = "0 0 0 3px var(--accent)";
-                }}
-                onBlur={(e) => {
-                  (e.currentTarget as HTMLInputElement).style.borderColor = "var(--border)";
-                  (e.currentTarget as HTMLInputElement).style.boxShadow = "none";
-                }}
-              />
-            </div>
-          </div>
-
-          {/* Notes */}
-          <div className="mb-6">
-            <label style={labelStyle}>Notes</label>
-            <textarea
-              placeholder="Any relevant context — referrals, recruiter info, application requirements, etc."
-              value={form.notes}
-              onChange={(e) => handleChange("notes", e.target.value)}
-              rows={4}
-              style={{
-                ...fieldStyle,
-                resize: "vertical",
-                lineHeight: 1.6,
-              }}
-              onFocus={(e) => {
-                (e.currentTarget as HTMLTextAreaElement).style.borderColor = "var(--ring)";
-                (e.currentTarget as HTMLTextAreaElement).style.boxShadow = "0 0 0 3px var(--accent)";
-              }}
-              onBlur={(e) => {
-                (e.currentTarget as HTMLTextAreaElement).style.borderColor = "var(--border)";
-                (e.currentTarget as HTMLTextAreaElement).style.boxShadow = "none";
-              }}
-            />
-          </div>
-
-          {error && (
-            <p role="alert" style={{ fontFamily: "var(--font-body)", fontSize: "0.8rem", color: "#B91C1C", background: "#FEE2E2", border: "1px solid #FCA5A5", borderRadius: "8px", padding: "8px 12px", marginBottom: "12px" }}>
-              {error}
-            </p>
+        <div className={cx("grid gap-4", editing && form.status !== "wishlist" ? "sm:grid-cols-3" : "sm:grid-cols-2")}>
+          <Field label="Job posting" hint="Link to the listing" className={editing && form.status !== "wishlist" ? "sm:col-span-1" : undefined}>
+            <Input icon={IconLink} type="url" inputMode="url" value={form.jobUrl} onChange={(e) => set("jobUrl", e.target.value)} onBlur={(e) => set("jobUrl", normalizeUrl(e.target.value))} placeholder="company.com/careers/…" />
+          </Field>
+          <Field label="Application deadline" hint="Shown on your dashboard and calendar">
+            <Input type="date" value={form.deadline} onChange={(e) => set("deadline", e.target.value)} />
+          </Field>
+          {editing && form.status !== "wishlist" && (
+            <Field label="Applied on">
+              <Input type="date" value={form.appliedDate} max={todayISO()} onChange={(e) => set("appliedDate", e.target.value)} />
+            </Field>
           )}
-
-          {/* Actions */}
-          <div className="flex items-center gap-3">
-            <button
-              style={{
-                flex: 1,
-                background: "var(--primary)",
-                color: "white",
-                border: "none",
-                borderRadius: "9px",
-                padding: "10px",
-                fontFamily: "var(--font-body)",
-                fontWeight: 600,
-                fontSize: "0.875rem",
-                cursor: saving ? "not-allowed" : "pointer",
-                opacity: saving || !canSave ? 0.6 : 1,
-                transition: "opacity 0.15s",
-              }}
-              disabled={saving}
-              onClick={handleSave}
-            >
-              {saving ? "Saving…" : "Save Application"}
-            </button>
-            <button
-              onClick={() => onNavigate("applications")}
-              style={{
-                padding: "10px 18px",
-                background: "var(--muted)",
-                color: "var(--foreground)",
-                border: "1px solid var(--border)",
-                borderRadius: "9px",
-                fontFamily: "var(--font-body)",
-                fontWeight: 500,
-                fontSize: "0.875rem",
-                cursor: "pointer",
-                transition: "background 0.15s",
-              }}
-              onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.background = "var(--border)")}
-              onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.background = "var(--muted)")}
-            >
-              Cancel
-            </button>
-          </div>
         </div>
-      </div>
-    </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Location">
+            <Input icon={IconMapPin} value={form.location} onChange={(e) => set("location", e.target.value)} placeholder="e.g. New York, NY · Hybrid" />
+          </Field>
+          <Field label="Compensation">
+            <Input icon={IconBanknote} value={form.salary} onChange={(e) => set("salary", e.target.value)} placeholder="e.g. $45/hr or $120k" />
+          </Field>
+        </div>
+
+        {!editing && (
+          <Field label="Notes">
+            <Textarea rows={3} value={form.notes} onChange={(e) => set("notes", e.target.value)} placeholder="Referral, recruiter name, requirements, anything worth remembering…" />
+          </Field>
+        )}
+
+        {/* Lets Enter submit from any single-line field. */}
+        <button type="submit" className="sr-only" aria-hidden="true" tabIndex={-1} />
+      </form>
+    </Modal>
   );
 }

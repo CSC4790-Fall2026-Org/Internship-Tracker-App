@@ -1,6 +1,30 @@
-import { useState } from "react";
-import { useData } from "../data/DataContext";
-import { daysUntil, toDate, todayISO } from "../data/dates";
+import { useMemo, useState } from "react";
+import { useData, type ActivityItem } from "../data/DataContext";
+import type { Task } from "../data/types";
+import { addDaysISO, daysUntil, formatDate, formatTime, todayISO } from "../data/dates";
+import { attentionItems, KIND_META, pipelineStats, upcomingItems, weeklySubmissions, type AttentionItem, type CalendarItem } from "../data/insights";
+import { Button, Card, CardHeader, Checkbox, cx, DueChip, EmptyState, IconButton, Input, LinkButton, Page, PageHeader, Select } from "../components/ui";
+import { ConversionFunnel, StatusDistribution, WeeklyColumns } from "../components/charts";
+import { useFeedback, errorMessage } from "../components/feedback";
+import {
+  IconAlertCircle,
+  IconArrowRight,
+  IconBriefcase,
+  IconCalendar,
+  IconCheck,
+  IconCheckCircle,
+  IconChevronRight,
+  IconClock,
+  IconInbox,
+  IconMessage,
+  IconPlus,
+  IconSend,
+  IconTaskSquare,
+  IconTrash,
+  IconUpload,
+  IconX,
+  type IconComponent,
+} from "../components/icons";
 
 interface DashboardProps {
   onNavigate: (screen: string, id?: string) => void;
@@ -8,351 +32,520 @@ interface DashboardProps {
 }
 
 export default function Dashboard({ onNavigate, userName }: DashboardProps) {
-  const { applications, tasks: taskList, recentActivity, addTask, setTaskDone } = useData();
-  const [newTask, setNewTask] = useState<{ text: string; due: string; applicationId: string } | null>(null);
-  const [savingTask, setSavingTask] = useState(false);
+  const { applications, tasks, events, recentActivity } = useData();
+  const stats = useMemo(() => pipelineStats(applications), [applications]);
+  const attention = useMemo(() => attentionItems(applications, tasks), [applications, tasks]);
+  const upcoming = useMemo(() => upcomingItems(applications, tasks, events, 14), [applications, tasks, events]);
+  const weeks = useMemo(() => weeklySubmissions(applications, 12), [applications]);
 
   const today = todayISO();
-  const activeApps = applications.filter((a) => a.status !== "rejected").length;
-  const upcomingDeadlines = applications
-    .filter((a) => a.deadline && a.deadline >= today && a.status !== "rejected" && a.status !== "offer")
-    .sort((a, b) => a.deadline.localeCompare(b.deadline))
-    .map((a) => ({ id: a.id, company: a.company, position: a.position, deadline: a.deadline, daysLeft: daysUntil(a.deadline) }));
-  const upcomingInterviews = applications
-    .flatMap((a) => a.interviewStages.filter((s) => !s.completed && s.date >= today).map((s) => ({ id: s.id, appId: a.id, company: a.company, position: a.position, stage: s.name, date: s.date })))
-    .sort((a, b) => a.date.localeCompare(b.date));
-  const deadlinesSoon = upcomingDeadlines.filter((d) => d.daysLeft <= 14);
-  const weekAgo = new Date(Date.now() - 7 * 86_400_000).toISOString().slice(0, 10);
-  const addedThisWeek = applications.filter((a) => a.appliedDate && a.appliedDate >= weekAgo).length;
-
   const now = new Date();
   const greeting = now.getHours() < 12 ? "Good morning" : now.getHours() < 18 ? "Good afternoon" : "Good evening";
   const firstName = userName.split(" ")[0];
 
-  const saveTask = async () => {
-    if (!newTask?.text.trim()) return;
-    setSavingTask(true);
-    try {
-      await addTask({ text: newTask.text, due: newTask.due, applicationId: newTask.applicationId || null });
-      setNewTask(null);
-    } catch (e) {
-      alert(`Couldn't add task: ${(e as Error).message}`);
-    } finally {
-      setSavingTask(false);
-    }
-  };
+  const weekAgo = addDaysISO(-6);
+  const appliedThisWeek = applications.filter((a) => a.appliedDate && a.appliedDate >= weekAgo && a.appliedDate <= today).length;
+  const upcomingRounds = applications.flatMap((a) => a.interviewStages.filter((s) => !s.completed && s.date && s.date >= today));
+  const nextInterview = upcoming.find((i) => i.kind === "interview");
 
-  const activityColor = (type: string) => {
-    if (type === "offer") return "#16A34A";
-    if (type === "rejected") return "#DC2626";
-    if (type === "interview") return "#D97706";
-    return "var(--primary)";
-  };
+  const summary =
+    applications.length === 0
+      ? "Let's get your search organized."
+      : [
+          attention.length > 0 ? `${attention.length} ${attention.length === 1 ? "thing needs" : "things need"} your attention` : "You're all caught up",
+          nextInterview ? `next interview ${daysUntil(nextInterview.date) === 0 ? "today" : formatDate(nextInterview.date, { weekday: true })}` : null,
+        ]
+          .filter(Boolean)
+          .join(" · ");
 
   return (
-    <div className="max-w-[1400px] mx-auto px-6 py-8">
-      {/* Header */}
-      <div className="mb-8 flex items-end justify-between">
-        <div>
-          <p style={{ fontFamily: "var(--font-body)", fontSize: "0.8125rem", color: "var(--muted-foreground)", marginBottom: "4px" }}>
-            {now.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
-          </p>
-          <h1 style={{ fontFamily: "var(--font-heading)", fontSize: "1.625rem", fontWeight: 700, color: "var(--foreground)", letterSpacing: "-0.02em" }}>
-            {greeting}, {firstName}
-          </h1>
+    <Page>
+      <PageHeader
+        eyebrow={now.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
+        title={`${greeting}, ${firstName}`}
+        description={summary.charAt(0).toUpperCase() + summary.slice(1)}
+        actions={
+          <Button variant="primary" icon={IconPlus} onClick={() => onNavigate("add")}>
+            Add application
+          </Button>
+        }
+      />
+
+      {applications.length === 0 ? (
+        <div className="grid gap-5 lg:grid-cols-3">
+          <GettingStarted onNavigate={onNavigate} />
+          <TasksCard />
         </div>
-        <button
-          onClick={() => onNavigate("add")}
-          style={{ background: "var(--primary)", color: "white", border: "none", borderRadius: "8px", padding: "9px 16px", fontFamily: "var(--font-body)", fontWeight: 600, fontSize: "0.8125rem", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px", transition: "opacity 0.15s" }}
-          onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = "0.85")}
-          onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = "1")}
-        >
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-            <path d="M6 1v10M1 6h10" stroke="white" strokeWidth="2" strokeLinecap="round" />
-          </svg>
-          Add Application
-        </button>
-      </div>
+      ) : (
+        <>
+          <KpiStrip
+            items={[
+              { label: "Tracked", value: stats.total, sub: appliedThisWeek ? `${appliedThisWeek} applied this week` : "None applied this week", onClick: () => onNavigate("applications") },
+              { label: "In progress", value: stats.active, sub: `${stats.awaiting} awaiting a reply`, onClick: () => onNavigate("pipeline") },
+              { label: "Interviewing", value: stats.interviewing, sub: upcomingRounds.length ? `${upcomingRounds.length} upcoming ${upcomingRounds.length === 1 ? "round" : "rounds"}` : "No rounds scheduled", onClick: () => onNavigate("applications", "interviewing") },
+              { label: "Offers", value: stats.offers, sub: stats.offerRate !== null ? `${stats.offerRate}% of interviews` : "None yet", onClick: () => onNavigate("applications", "offer") },
+              { label: "Response rate", value: stats.responseRate === null ? "—" : `${stats.responseRate}%`, sub: stats.submitted ? `${stats.heardBack} of ${stats.submitted} heard back` : "Nothing submitted yet" },
+            ]}
+          />
 
-      {/* Summary stats — flat, no icon boxes */}
-      <div className="grid grid-cols-3 gap-4 mb-8">
-        {[
-          { label: "Active Applications", value: activeApps, sub: `${addedThisWeek} applied this week`, accent: "var(--primary)" },
-          { label: "Deadlines in 2 weeks", value: deadlinesSoon.length, sub: deadlinesSoon.length ? `${deadlinesSoon[0].company} is next` : "Nothing due soon", accent: "#B45309" },
-          { label: "Upcoming Interviews", value: upcomingInterviews.length, sub: upcomingInterviews.length ? `${upcomingInterviews[0].company} — ${toDate(upcomingInterviews[0].date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : "None scheduled", accent: "#6D28D9" },
-        ].map((card) => (
-          <div
-            key={card.label}
-            style={{ background: "var(--card)", border: "1px solid var(--border)", borderLeft: `3px solid ${card.accent}`, borderRadius: "8px", padding: "20px 20px 18px" }}
-          >
-            <p style={{ fontFamily: "var(--font-body)", fontSize: "0.8rem", color: "var(--muted-foreground)", marginBottom: "8px" }}>
-              {card.label}
-            </p>
-            <p style={{ fontFamily: "var(--font-heading)", fontSize: "2rem", fontWeight: 700, color: "var(--foreground)", letterSpacing: "-0.03em", lineHeight: 1, marginBottom: "6px" }}>
-              {card.value}
-            </p>
-            <p style={{ fontFamily: "var(--font-body)", fontSize: "0.75rem", color: "var(--muted-foreground)" }}>
-              {card.sub}
-            </p>
-          </div>
-        ))}
-      </div>
-
-      {/* Main grid */}
-      <div className="grid gap-6" style={{ gridTemplateColumns: "1fr 1fr 312px" }}>
-
-        {/* Deadlines */}
-        <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: "8px", padding: "20px" }}>
-          <div className="flex items-center justify-between mb-4">
-            <h2 style={{ fontFamily: "var(--font-heading)", fontWeight: 600, fontSize: "0.9375rem", color: "var(--foreground)" }}>
-              Upcoming Deadlines
-            </h2>
-            <button
-              style={{ fontFamily: "var(--font-body)", fontSize: "0.75rem", color: "var(--primary)", background: "none", border: "none", cursor: "pointer" }}
-              onClick={() => onNavigate("applications")}
-            >
-              View all →
-            </button>
-          </div>
-          <div className="flex flex-col gap-2">
-            {upcomingDeadlines.length === 0 && (
-              <p style={{ fontFamily: "var(--font-body)", fontSize: "0.8125rem", color: "var(--muted-foreground)" }}>
-                No upcoming deadlines.
-              </p>
-            )}
-            {upcomingDeadlines.slice(0, 5).map((item) => (
-              <div
-                key={item.id}
-                style={{ display: "flex", alignItems: "center", padding: "10px 12px", borderRadius: "6px", background: "var(--muted)", cursor: "pointer", transition: "background 0.12s" }}
-                onMouseEnter={(e) => ((e.currentTarget as HTMLDivElement).style.background = "var(--accent)")}
-                onMouseLeave={(e) => ((e.currentTarget as HTMLDivElement).style.background = "var(--muted)")}
-                onClick={() => onNavigate("detail", item.id)}
-              >
-                <div className="flex-1 min-w-0">
-                  <p style={{ fontFamily: "var(--font-body)", fontWeight: 600, fontSize: "0.8125rem", color: "var(--foreground)", marginBottom: "1px" }}>
-                    {item.company}
-                  </p>
-                  <p style={{ fontFamily: "var(--font-body)", fontSize: "0.75rem", color: "var(--muted-foreground)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {item.position}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2 shrink-0 ml-3">
-                  <span style={{ fontFamily: "var(--font-mono-base)", fontSize: "0.6875rem", color: "var(--muted-foreground)" }}>
-                    {toDate(item.deadline).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                  </span>
-                  <span
-                    style={{
-                      fontFamily: "var(--font-mono-base)", fontSize: "0.6875rem", fontWeight: 500,
-                      padding: "2px 6px", borderRadius: "4px",
-                      background: item.daysLeft <= 7 ? "#FEE2E2" : item.daysLeft <= 14 ? "#FEF3C7" : "var(--muted)",
-                      color: item.daysLeft <= 7 ? "#B91C1C" : item.daysLeft <= 14 ? "#92400E" : "var(--muted-foreground)",
-                    }}
-                  >
-                    {item.daysLeft}d
-                  </span>
-                </div>
+          {/* Two columns on desktop; on narrower screens the columns dissolve so today's schedule comes before the charts. */}
+          <div className="mt-5 grid items-start gap-5 lg:grid-cols-3">
+            <div className="flex min-w-0 flex-col gap-5 max-lg:contents lg:col-span-2">
+              <div className="min-w-0 max-lg:order-1">
+                <AttentionCard items={attention} onNavigate={onNavigate} />
               </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Interviews + Activity */}
-        <div className="flex flex-col gap-6">
-          {/* Interviews */}
-          <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: "8px", padding: "20px" }}>
-            <h2 style={{ fontFamily: "var(--font-heading)", fontWeight: 600, fontSize: "0.9375rem", color: "var(--foreground)", marginBottom: "14px" }}>
-              Upcoming Interviews
-            </h2>
-            {upcomingInterviews.length === 0 ? (
-              <p style={{ fontFamily: "var(--font-body)", fontSize: "0.8125rem", color: "var(--muted-foreground)" }}>
-                No interviews scheduled.
-              </p>
-            ) : (
-              upcomingInterviews.slice(0, 3).map((iv) => (
-                <div
-                  key={iv.id}
-                  style={{ borderRadius: "6px", background: "var(--muted)", border: "1px solid var(--border)", borderLeft: "3px solid var(--primary)", padding: "14px 16px", cursor: "pointer", marginBottom: "8px" }}
-                  onClick={() => onNavigate("detail", iv.appId)}
-                >
-                  <div className="flex items-center justify-between mb-1">
-                    <p style={{ fontFamily: "var(--font-body)", fontWeight: 600, fontSize: "0.875rem", color: "var(--foreground)" }}>
-                      {iv.company}
-                    </p>
-                    <span style={{ fontFamily: "var(--font-mono-base)", fontSize: "0.6875rem", fontWeight: 600, color: "var(--primary)" }}>
-                      {toDate(iv.date).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
-                    </span>
-                  </div>
-                  <p style={{ fontFamily: "var(--font-body)", fontSize: "0.8125rem", color: "var(--muted-foreground)", marginBottom: "6px" }}>
-                    {iv.stage}
-                  </p>
-                  <p style={{ fontFamily: "var(--font-mono-base)", fontSize: "0.6875rem", color: "var(--muted-foreground)" }}>
-                    {iv.position}
-                  </p>
-                </div>
-              ))
-            )}
-          </div>
-
-          {/* Recent Activity */}
-          <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: "8px", padding: "20px", flex: 1 }}>
-            <h2 style={{ fontFamily: "var(--font-heading)", fontWeight: 600, fontSize: "0.9375rem", color: "var(--foreground)", marginBottom: "16px" }}>
-              Recent Activity
-            </h2>
-            <div className="flex flex-col">
-              {recentActivity.length === 0 && (
-                <p style={{ fontFamily: "var(--font-body)", fontSize: "0.8125rem", color: "var(--muted-foreground)" }}>
-                  No activity yet. Add your first application to get started.
-                </p>
-              )}
-              {recentActivity.map((item, i) => (
-                <div
-                  key={item.id}
-                  style={{
-                    display: "flex", alignItems: "flex-start", gap: "12px",
-                    paddingBottom: i < recentActivity.length - 1 ? "14px" : 0,
-                    marginBottom: i < recentActivity.length - 1 ? "14px" : 0,
-                    borderBottom: i < recentActivity.length - 1 ? "1px solid var(--border)" : "none",
-                  }}
-                >
-                  <div
-                    style={{
-                      width: "3px", height: "36px", borderRadius: "2px",
-                      background: activityColor(item.icon),
-                      flexShrink: 0, marginTop: "2px",
-                    }}
-                  />
-                  <div className="flex-1 min-w-0">
-                    <p style={{ fontFamily: "var(--font-body)", fontSize: "0.8125rem", color: "var(--foreground)", marginBottom: "2px", lineHeight: 1.4 }}>
-                      {item.text}
-                    </p>
-                    <p style={{ fontFamily: "var(--font-body)", fontSize: "0.6875rem", color: "var(--muted-foreground)" }}>
-                      {item.time}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Tasks */}
-        <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: "8px", padding: "20px" }}>
-          <div className="flex items-center justify-between mb-4">
-            <h2 style={{ fontFamily: "var(--font-heading)", fontWeight: 600, fontSize: "0.9375rem", color: "var(--foreground)" }}>
-              Tasks & Follow-ups
-            </h2>
-            <span style={{ fontFamily: "var(--font-mono-base)", fontSize: "0.6875rem", color: "var(--muted-foreground)" }}>
-              {taskList.filter((t) => !t.done).length} open
-            </span>
-          </div>
-          <div className="flex flex-col gap-1.5">
-            {taskList.map((task) => (
-              <label
-                key={task.id}
-                style={{
-                  display: "flex", alignItems: "flex-start", gap: "10px",
-                  padding: "9px 10px", borderRadius: "6px", cursor: "pointer",
-                  transition: "background 0.12s",
-                  background: task.done ? "transparent" : "var(--muted)",
-                  opacity: task.done ? 0.5 : 1,
-                }}
-                onMouseEnter={(e) => { if (!task.done) (e.currentTarget as HTMLLabelElement).style.background = "var(--accent)"; }}
-                onMouseLeave={(e) => { if (!task.done) (e.currentTarget as HTMLLabelElement).style.background = "var(--muted)"; }}
-              >
-                <div style={{ paddingTop: "1px", flexShrink: 0 }}>
-                  <input
-                    type="checkbox"
-                    checked={task.done}
-                    onChange={() => setTaskDone(task.id, !task.done).catch((e) => alert(`Couldn't update task: ${e.message}`))}
-                    style={{ accentColor: "var(--primary)", width: "14px", height: "14px", cursor: "pointer" }}
-                  />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p style={{ fontFamily: "var(--font-body)", fontSize: "0.8rem", color: "var(--foreground)", textDecoration: task.done ? "line-through" : "none", lineHeight: 1.45 }}>
-                    {task.text}
-                  </p>
-                  {(task.company || task.due) && (
-                    <div className="flex items-center gap-2 mt-1">
-                      {task.company && (
-                        <span style={{ fontFamily: "var(--font-body)", fontSize: "0.6875rem", color: "var(--muted-foreground)" }}>
-                          {task.company}
-                        </span>
-                      )}
-                      {task.company && task.due && <span style={{ color: "var(--border)", fontSize: "0.75rem" }}>·</span>}
-                      {task.due && (
-                        <span style={{ fontFamily: "var(--font-mono-base)", fontSize: "0.6375rem", color: "var(--muted-foreground)" }}>
-                          Due {toDate(task.due).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                        </span>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </label>
-            ))}
-          </div>
-          {taskList.length === 0 && !newTask && (
-            <p style={{ fontFamily: "var(--font-body)", fontSize: "0.8125rem", color: "var(--muted-foreground)" }}>
-              No tasks yet.
-            </p>
-          )}
-          {newTask ? (
-            <div style={{ marginTop: "12px", display: "flex", flexDirection: "column", gap: "6px" }}>
-              <input
-                autoFocus
-                placeholder="What needs doing?"
-                value={newTask.text}
-                onChange={(e) => setNewTask({ ...newTask, text: e.target.value })}
-                onKeyDown={(e) => { if (e.key === "Enter") saveTask(); if (e.key === "Escape") setNewTask(null); }}
-                style={taskInputStyle}
-              />
-              <div style={{ display: "flex", gap: "6px" }}>
-                <select value={newTask.applicationId} onChange={(e) => setNewTask({ ...newTask, applicationId: e.target.value })} style={{ ...taskInputStyle, flex: 1, minWidth: 0 }}>
-                  <option value="">No application</option>
-                  {applications.map((a) => (
-                    <option key={a.id} value={a.id}>{a.company}</option>
-                  ))}
-                </select>
-                <input type="date" value={newTask.due} onChange={(e) => setNewTask({ ...newTask, due: e.target.value })} style={{ ...taskInputStyle, width: "auto" }} />
+              <div className="min-w-0 max-lg:order-4">
+                <PipelineCard onNavigate={onNavigate} stats={stats} weeks={weeks} />
               </div>
-              <div style={{ display: "flex", gap: "6px" }}>
-                <button
-                  onClick={saveTask}
-                  disabled={savingTask || !newTask.text.trim()}
-                  style={{ flex: 1, padding: "7px", borderRadius: "6px", border: "none", background: "var(--primary)", color: "white", fontFamily: "var(--font-body)", fontSize: "0.8rem", fontWeight: 600, cursor: "pointer", opacity: savingTask || !newTask.text.trim() ? 0.6 : 1 }}
-                >
-                  {savingTask ? "Saving…" : "Add task"}
-                </button>
-                <button
-                  onClick={() => setNewTask(null)}
-                  style={{ padding: "7px 12px", borderRadius: "6px", border: "1px solid var(--border)", background: "var(--muted)", color: "var(--foreground)", fontFamily: "var(--font-body)", fontSize: "0.8rem", cursor: "pointer" }}
-                >
-                  Cancel
-                </button>
+              <div className="min-w-0 max-lg:order-5">
+                <ActivityCard items={recentActivity} onNavigate={onNavigate} />
               </div>
             </div>
-          ) : (
-          <button
-            onClick={() => setNewTask({ text: "", due: "", applicationId: "" })}
-            style={{
-              marginTop: "12px", width: "100%", padding: "8px",
-              borderRadius: "6px", border: "1.5px dashed var(--border)",
-              background: "transparent", fontFamily: "var(--font-body)",
-              fontSize: "0.8rem", color: "var(--muted-foreground)", cursor: "pointer", transition: "all 0.12s",
-            }}
-            onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--primary)"; (e.currentTarget as HTMLButtonElement).style.color = "var(--primary)"; }}
-            onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--border)"; (e.currentTarget as HTMLButtonElement).style.color = "var(--muted-foreground)"; }}
-          >
-            + Add task
-          </button>
-          )}
-        </div>
-      </div>
-    </div>
+            <div className="flex min-w-0 flex-col gap-5 max-lg:contents">
+              <div className="min-w-0 max-lg:order-2">
+                <UpNextCard items={upcoming} onNavigate={onNavigate} />
+              </div>
+              <div className="min-w-0 max-lg:order-3">
+                <TasksCard />
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+    </Page>
   );
 }
 
-const taskInputStyle: React.CSSProperties = {
-  width: "100%", padding: "7px 10px", boxSizing: "border-box",
-  fontFamily: "var(--font-body)", fontSize: "0.8rem", color: "var(--foreground)",
-  background: "var(--muted)", border: "1px solid var(--border)", borderRadius: "6px", outline: "none",
+// ---------- KPI strip ----------
+
+function KpiStrip({ items }: { items: { label: string; value: number | string; sub: string; onClick?: () => void }[] }) {
+  return (
+    // The 1px gaps over a line-colored background draw the dividers, whatever the column count.
+    <Card className="grid grid-cols-2 gap-px overflow-hidden bg-line sm:grid-cols-3 lg:grid-cols-5">
+      {items.map((item, i) => {
+        const body = (
+          <>
+            <span className="text-ui text-fg-muted">{item.label}</span>
+            <span className="mt-1.5 block text-2xl font-semibold tracking-[-0.02em] text-fg">{item.value}</span>
+            <span className="mt-0.5 block truncate text-xs text-fg-muted">{item.sub}</span>
+          </>
+        );
+        // The last tile widens to fill the final row on two- and three-column layouts.
+        const cls = cx("block min-w-0 bg-surface px-4 py-3.5 text-left", i === items.length - 1 && "col-span-2 lg:col-span-1");
+        return item.onClick ? (
+          <button key={item.label} type="button" onClick={item.onClick} className={cx(cls, "transition-colors hover:bg-subtle")}>
+            {body}
+          </button>
+        ) : (
+          <div key={item.label} className={cls}>
+            {body}
+          </div>
+        );
+      })}
+    </Card>
+  );
+}
+
+// ---------- Needs attention ----------
+
+const ATTENTION_ICON: Record<AttentionItem["kind"], IconComponent> = {
+  "task-overdue": IconTaskSquare,
+  "deadline-passed": IconAlertCircle,
+  "deadline-soon": IconClock,
+  "interview-soon": IconMessage,
+  "stage-unlogged": IconMessage,
+  "follow-up": IconSend,
 };
+
+function AttentionCard({ items, onNavigate }: { items: AttentionItem[]; onNavigate: (screen: string, id?: string) => void }) {
+  const { setTaskDone } = useData();
+  const { toast } = useFeedback();
+  const [expanded, setExpanded] = useState(false);
+  const shown = expanded ? items : items.slice(0, 5);
+
+  return (
+    <Card>
+      <CardHeader icon={IconInbox} title="Needs attention" description={items.length ? "Overdue tasks, closing deadlines, and applications that have gone quiet" : undefined} />
+      {items.length === 0 ? (
+        <EmptyState compact icon={IconCheckCircle} title="You're all caught up" description="No overdue tasks, closing deadlines or stale applications right now." className="pt-2" />
+      ) : (
+        <ul className="border-t border-line">
+          {shown.map((item) => {
+            const Icon = ATTENTION_ICON[item.kind];
+            return (
+              <li key={item.key} className="group flex items-center gap-3 border-b border-line px-4 py-2.5 last:border-b-0">
+                <span
+                  className={cx(
+                    "flex size-7 shrink-0 items-center justify-center rounded-md",
+                    item.severity === "danger" ? "bg-danger-soft text-danger-fg" : item.severity === "warning" ? "bg-warning-soft text-warning-fg" : "bg-muted text-fg-muted",
+                  )}
+                >
+                  <Icon size={15} />
+                </span>
+                <button type="button" disabled={!item.appId} onClick={() => item.appId && onNavigate("detail", item.appId)} className="min-w-0 flex-1 text-left">
+                  <span className="block truncate text-ui font-medium text-fg">{item.title}</span>
+                  <span className="block truncate text-xs text-fg-muted">{item.detail}</span>
+                </button>
+                {item.taskId ? (
+                  <Button
+                    size="sm"
+                    icon={IconCheck}
+                    onClick={() =>
+                      setTaskDone(item.taskId!, true)
+                        .then(() => toast("Task completed"))
+                        .catch((e) => toast(`Couldn't update task: ${errorMessage(e)}`, { tone: "error" }))
+                    }
+                  >
+                    Done
+                  </Button>
+                ) : (
+                  item.appId && <IconChevronRight size={16} className="text-fg-faint transition-colors group-hover:text-fg-muted" />
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {items.length > 5 && (
+        <div className="border-t border-line px-4 py-2">
+          <LinkButton onClick={() => setExpanded((e) => !e)}>{expanded ? "Show fewer" : `Show all ${items.length}`}</LinkButton>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+// ---------- Pipeline ----------
+
+function PipelineCard({ onNavigate, stats, weeks }: { onNavigate: (screen: string, id?: string) => void; stats: ReturnType<typeof pipelineStats>; weeks: { label: string; count: number }[] }) {
+  const { applications } = useData();
+  const recent = weeks.reduce((n, w) => n + w.count, 0);
+  return (
+    <Card>
+      <CardHeader
+        title="Pipeline"
+        description={`${stats.total} tracked · ${stats.submitted} submitted`}
+        action={
+          <LinkButton onClick={() => onNavigate("pipeline")}>
+            Open board <IconArrowRight size={14} />
+          </LinkButton>
+        }
+      />
+      <div className="px-4 pb-4">
+        <StatusDistribution applications={applications} onSelect={(s) => onNavigate("applications", s)} />
+      </div>
+      <div className="grid border-t border-line sm:grid-cols-2">
+        <div className="p-4 sm:border-r sm:border-line">
+          <p className="mb-3 text-ui font-medium text-fg">Conversion</p>
+          {stats.submitted === 0 ? (
+            <p className="text-ui text-fg-muted">Conversion appears once you've submitted an application.</p>
+          ) : (
+            <ConversionFunnel
+              steps={[
+                { label: "Submitted", value: stats.submitted },
+                { label: "Heard back", value: stats.heardBack },
+                { label: "Interviewed", value: stats.interviewed },
+                { label: "Offer", value: stats.offers },
+              ]}
+            />
+          )}
+        </div>
+        <div className="border-t border-line p-4 sm:border-t-0">
+          <div className="mb-3 flex items-baseline justify-between gap-2">
+            <p className="text-ui font-medium text-fg">Applications per week</p>
+            <p className="text-xs text-fg-muted tabular-nums">{recent} in 12 weeks</p>
+          </div>
+          <WeeklyColumns weeks={weeks} />
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+// ---------- Up next ----------
+
+function dayHeading(iso: string) {
+  const d = daysUntil(iso);
+  if (d === 0) return "Today";
+  if (d === 1) return "Tomorrow";
+  return formatDate(iso, { weekday: true });
+}
+
+function UpNextCard({ items, onNavigate }: { items: CalendarItem[]; onNavigate: (screen: string, id?: string) => void }) {
+  const shown = items.slice(0, 7);
+  const groups: { date: string; items: CalendarItem[] }[] = [];
+  for (const item of shown) {
+    const last = groups[groups.length - 1];
+    if (last?.date === item.date) last.items.push(item);
+    else groups.push({ date: item.date, items: [item] });
+  }
+
+  const open = (item: CalendarItem) => {
+    if (item.event) onNavigate("calendar", item.event.id);
+    else if (item.applicationId) onNavigate("detail", item.applicationId);
+    else onNavigate("calendar");
+  };
+
+  return (
+    <Card>
+      <CardHeader
+        icon={IconCalendar}
+        title="Up next"
+        description="The next two weeks"
+        action={
+          <LinkButton onClick={() => onNavigate("calendar")}>
+            Calendar <IconArrowRight size={14} />
+          </LinkButton>
+        }
+      />
+      {groups.length === 0 ? (
+        <EmptyState compact title="Nothing scheduled" description="Interviews, deadlines and events you add will show up here." className="pt-1" />
+      ) : (
+        <div className="space-y-3 px-2 pb-3">
+          {groups.map((group) => (
+            <div key={group.date}>
+              <p className={cx("px-2 pb-1 text-xs font-medium", daysUntil(group.date) === 0 ? "text-accent-fg" : "text-fg-muted")}>{dayHeading(group.date)}</p>
+              <ul>
+                {group.items.map((item) => (
+                  <li key={item.id}>
+                    <button type="button" onClick={() => open(item)} className="flex w-full items-start gap-2.5 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-muted">
+                      <span className={cx("mt-1.5 size-2 shrink-0 rounded-full", KIND_META[item.kind].dot)} aria-hidden="true" />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-ui text-fg">{item.label}</span>
+                        <span className="block truncate text-xs text-fg-muted">
+                          {KIND_META[item.kind].label}
+                          {item.time && ` · ${formatTime(item.time)}`}
+                          {item.detail && item.kind !== "event" && ` · ${item.detail}`}
+                        </span>
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+          {items.length > shown.length && (
+            <div className="px-2">
+              <LinkButton onClick={() => onNavigate("calendar")}>{items.length - shown.length} more in the calendar</LinkButton>
+            </div>
+          )}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+// ---------- Tasks ----------
+
+function sortTasks(tasks: Task[]) {
+  // Open tasks with a due date first (soonest first), then undated ones.
+  return [...tasks].sort((a, b) => (a.due ? 0 : 1) - (b.due ? 0 : 1) || a.due.localeCompare(b.due) || a.text.localeCompare(b.text));
+}
+
+function TasksCard() {
+  const { applications, tasks, addTask, setTaskDone, deleteTask } = useData();
+  const { toast } = useFeedback();
+  const [draft, setDraft] = useState<{ text: string; due: string; applicationId: string } | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [showDone, setShowDone] = useState(false);
+
+  const open = sortTasks(tasks.filter((t) => !t.done));
+  const done = tasks.filter((t) => t.done);
+
+  const save = async () => {
+    if (!draft?.text.trim()) return;
+    setSaving(true);
+    try {
+      await addTask({ text: draft.text, due: draft.due, applicationId: draft.applicationId || null });
+      setDraft({ text: "", due: "", applicationId: draft.applicationId });
+    } catch (e) {
+      toast(`Couldn't add task: ${errorMessage(e)}`, { tone: "error" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const toggle = (task: Task) =>
+    setTaskDone(task.id, !task.done).catch((e) => toast(`Couldn't update task: ${errorMessage(e)}`, { tone: "error" }));
+
+  const remove = async (task: Task) => {
+    try {
+      await deleteTask(task.id);
+      toast("Task deleted", {
+        tone: "info",
+        action: {
+          label: "Undo",
+          onClick: () =>
+            addTask({ text: task.text, due: task.due, applicationId: task.applicationId })
+              .then((id) => (task.done ? setTaskDone(id, true) : undefined))
+              .catch((e) => toast(`Couldn't restore task: ${errorMessage(e)}`, { tone: "error" })),
+        },
+      });
+    } catch (e) {
+      toast(`Couldn't delete task: ${errorMessage(e)}`, { tone: "error" });
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader
+        icon={IconTaskSquare}
+        title="Tasks"
+        description={open.length ? `${open.length} open` : undefined}
+        action={!draft && <IconButton icon={IconPlus} size="sm" label="Add task" onClick={() => setDraft({ text: "", due: "", applicationId: "" })} />}
+      />
+
+      {draft && (
+        <form
+          className="mx-3 mb-3 space-y-2 rounded-lg border border-line bg-subtle p-2.5"
+          onSubmit={(e) => {
+            e.preventDefault();
+            save();
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              e.stopPropagation();
+              setDraft(null);
+            }
+          }}
+        >
+          <Input autoFocus aria-label="Task" placeholder="e.g. Send thank-you note to recruiter" value={draft.text} onChange={(e) => setDraft({ ...draft, text: e.target.value })} />
+          <div className="flex gap-2">
+            <Select aria-label="Related application" wrapperClassName="min-w-0 flex-1" value={draft.applicationId} onChange={(e) => setDraft({ ...draft, applicationId: e.target.value })}>
+              <option value="">No application</option>
+              {applications.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.company} · {a.position}
+                </option>
+              ))}
+            </Select>
+            <Input aria-label="Due date" type="date" className="w-36" value={draft.due} onChange={(e) => setDraft({ ...draft, due: e.target.value })} />
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button size="sm" variant="ghost" onClick={() => setDraft(null)}>
+              Done
+            </Button>
+            <Button size="sm" variant="primary" type="submit" loading={saving} disabled={!draft.text.trim()}>
+              Add task
+            </Button>
+          </div>
+        </form>
+      )}
+
+      {open.length === 0 && !draft ? (
+        <EmptyState
+          compact
+          title={done.length ? "All tasks done" : "No tasks yet"}
+          description="Follow-ups, thank-you notes, prep: anything with a due date shows on your calendar."
+          actions={
+            <Button size="sm" icon={IconPlus} onClick={() => setDraft({ text: "", due: "", applicationId: "" })}>
+              Add a task
+            </Button>
+          }
+          className="pt-1"
+        />
+      ) : (
+        <ul className="px-2 pb-2">
+          {open.map((task) => (
+            <TaskRow key={task.id} task={task} onToggle={() => toggle(task)} onDelete={() => remove(task)} />
+          ))}
+        </ul>
+      )}
+
+      {done.length > 0 && (
+        <div className="border-t border-line px-2 py-2">
+          <button type="button" onClick={() => setShowDone((s) => !s)} className="flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-fg-muted hover:text-fg" aria-expanded={showDone}>
+            <IconChevronRight size={14} className={cx("transition-transform", showDone && "rotate-90")} />
+            Completed ({done.length})
+          </button>
+          {showDone && (
+            <ul className="mt-1">
+              {done.map((task) => (
+                <TaskRow key={task.id} task={task} onToggle={() => toggle(task)} onDelete={() => remove(task)} />
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function TaskRow({ task, onToggle, onDelete }: { task: Task; onToggle: () => void; onDelete: () => void }) {
+  return (
+    <li className="group flex items-start gap-2.5 rounded-md px-2 py-1.5 transition-colors hover:bg-muted/60">
+      <Checkbox checked={task.done} onChange={onToggle} aria-label={task.done ? `Mark "${task.text}" as not done` : `Mark "${task.text}" as done`} className="mt-0.5" />
+      <div className="min-w-0 flex-1">
+        <p className={cx("text-ui leading-snug", task.done ? "text-fg-muted line-through" : "text-fg")}>{task.text}</p>
+        {(task.company || task.due) && (
+          <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-xs text-fg-muted">
+            {task.company && <span className="truncate">{task.company}</span>}
+            {task.company && task.due && <span aria-hidden="true">·</span>}
+            {task.due && (task.done ? <span>{formatDate(task.due)}</span> : <DueChip date={task.due} prefix="Due" />)}
+          </p>
+        )}
+      </div>
+      <IconButton icon={IconTrash} size="sm" label={`Delete "${task.text}"`} onClick={onDelete} className="-my-0.5 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 max-lg:opacity-100" />
+    </li>
+  );
+}
+
+// ---------- Activity ----------
+
+const ACTIVITY_ICON: Record<ActivityItem["icon"], { icon: IconComponent; cls: string }> = {
+  offer: { icon: IconCheckCircle, cls: "bg-status-offer-soft text-status-offer-fg" },
+  rejected: { icon: IconX, cls: "bg-status-rejected-soft text-status-rejected-fg" },
+  interview: { icon: IconMessage, cls: "bg-status-interviewing-soft text-status-interviewing-fg" },
+  added: { icon: IconPlus, cls: "bg-muted text-fg-muted" },
+  status: { icon: IconArrowRight, cls: "bg-status-applied-soft text-status-applied-fg" },
+};
+
+function ActivityCard({ items, onNavigate }: { items: ActivityItem[]; onNavigate: (screen: string, id?: string) => void }) {
+  return (
+    <Card>
+      <CardHeader title="Recent activity" />
+      <ul className="px-2 pb-2">
+        {items.map((item) => {
+          const meta = ACTIVITY_ICON[item.icon];
+          return (
+            <li key={item.id}>
+              <button type="button" onClick={() => onNavigate("detail", item.id)} className="flex w-full items-center gap-3 rounded-md px-2 py-2 text-left transition-colors hover:bg-muted">
+                <span className={cx("flex size-6 shrink-0 items-center justify-center rounded-full", meta.cls)}>
+                  <meta.icon size={13} strokeWidth={2} />
+                </span>
+                <span className="min-w-0 flex-1 truncate text-ui text-fg">{item.text}</span>
+                <span className="shrink-0 text-xs text-fg-muted">{item.time}</span>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </Card>
+  );
+}
+
+// ---------- Empty account ----------
+
+function GettingStarted({ onNavigate }: { onNavigate: (screen: string, id?: string) => void }) {
+  const options: { icon: IconComponent; title: string; text: string; onClick: () => void }[] = [
+    { icon: IconPlus, title: "Add an application", text: "Company, role, deadline. Takes about ten seconds.", onClick: () => onNavigate("add") },
+    { icon: IconUpload, title: "Import a spreadsheet", text: "Bring an existing tracker in from a CSV file.", onClick: () => onNavigate("applications") },
+    { icon: IconBriefcase, title: "Find openings", text: "Browse listings or get matches from your resume.", onClick: () => onNavigate("jobs") },
+  ];
+  return (
+    <Card className="lg:col-span-2">
+      <CardHeader title="Start tracking your search" description="Once you add applications, this page shows what needs attention, upcoming interviews and how your pipeline is converting." />
+      <div className="grid gap-3 px-4 pb-4 sm:grid-cols-3">
+        {options.map((opt) => (
+          <button key={opt.title} type="button" onClick={opt.onClick} className="group flex flex-col items-start rounded-lg border border-line p-3.5 text-left transition-[border-color,box-shadow] hover:border-line-strong hover:shadow-card-hover">
+            <span className="mb-3 flex size-8 items-center justify-center rounded-md bg-muted text-fg-2 transition-colors group-hover:bg-accent-soft group-hover:text-accent-fg">
+              <opt.icon size={16} />
+            </span>
+            <span className="text-ui font-medium text-fg">{opt.title}</span>
+            <span className="mt-0.5 text-xs text-fg-muted">{opt.text}</span>
+          </button>
+        ))}
+      </div>
+    </Card>
+  );
+}
