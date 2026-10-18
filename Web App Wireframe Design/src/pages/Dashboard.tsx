@@ -6,7 +6,7 @@ import { attentionItems, KIND_META, pipelineStats, upcomingItems, weeklySubmissi
 import { Button, Card, Checkbox, cx, DueChip, EmptyState, IconButton, Input, LinkButton, Page, Segmented, Select } from "../components/ui";
 import { ConversionFunnel, StatusDistribution, WeeklyColumns } from "../components/charts";
 import { useFeedback, errorMessage } from "../components/feedback";
-import { IconArrowRight, IconBriefcase, IconCheck, IconCheckCircle, IconChevronRight, IconPlus, IconTrash, IconUpload, type IconComponent } from "../components/icons";
+import { IconArrowRight, IconBriefcase, IconCheck, IconCheckCircle, IconChevronRight, IconMessage, IconPlus, IconSend, IconTrash, IconTrendingUp, IconTrophy, IconUpload, type IconComponent } from "../components/icons";
 
 interface DashboardProps {
   onNavigate: (screen: string, id?: string) => void;
@@ -71,10 +71,10 @@ export default function Dashboard({ onNavigate, userName }: DashboardProps) {
         <div className="space-y-6">
           <Stats
             items={[
-              { label: "In progress", value: stats.active, sub: appliedThisWeek ? `${appliedThisWeek} applied this week` : `${stats.total} tracked in total`, onClick: () => onNavigate("pipeline") },
-              { label: "Interviewing", value: stats.interviewing, sub: upcomingRounds ? `${upcomingRounds} upcoming ${upcomingRounds === 1 ? "round" : "rounds"}` : "None scheduled", onClick: () => onNavigate("applications", "interviewing") },
-              { label: "Offers", value: stats.offers, sub: stats.offers ? "Congratulations" : "Not yet", onClick: () => onNavigate("applications", "offer") },
-              { label: "Response rate", value: stats.responseRate === null ? "—" : `${stats.responseRate}%`, sub: stats.submitted ? `${stats.heardBack} of ${stats.submitted} heard back` : "Nothing submitted yet" },
+              { label: "In progress", tone: "applied", icon: IconSend, value: stats.active, sub: appliedThisWeek ? `${appliedThisWeek} applied this week` : `${stats.total} tracked in total`, onClick: () => onNavigate("pipeline") },
+              { label: "Interviewing", tone: "interviewing", icon: IconMessage, value: stats.interviewing, sub: upcomingRounds ? `${upcomingRounds} upcoming ${upcomingRounds === 1 ? "round" : "rounds"}` : "None scheduled", onClick: () => onNavigate("applications", "interviewing") },
+              { label: "Offers", tone: "offer", icon: IconTrophy, value: stats.offers, sub: stats.offers ? "Congratulations!" : "Not yet", onClick: () => onNavigate("applications", "offer") },
+              { label: "Response rate", tone: "accent", icon: IconTrendingUp, value: stats.responseRate === null ? "—" : `${stats.responseRate}%`, meter: stats.responseRate, sub: stats.submitted ? `${stats.heardBack} of ${stats.submitted} heard back` : "Nothing submitted yet" },
             ]}
           />
 
@@ -92,24 +92,57 @@ export default function Dashboard({ onNavigate, userName }: DashboardProps) {
 
 // ---------- Headline numbers ----------
 
-/** Large, borderless figures: the numbers are the design, so they get no boxes. */
-function Stats({ items }: { items: { label: string; value: number | string; sub: string; onClick?: () => void }[] }) {
+type StatTone = "applied" | "interviewing" | "offer" | "accent";
+
+// Each tile borrows the color of what it counts, so the dashboard and board share one visual language.
+const STAT_TONE: Record<StatTone, { chip: string; meter: string; glow: string }> = {
+  applied: { chip: "bg-status-applied-soft text-status-applied-fg", meter: "bg-status-applied", glow: "from-status-applied-soft/70" },
+  interviewing: { chip: "bg-status-interviewing-soft text-status-interviewing-fg", meter: "bg-status-interviewing", glow: "from-status-interviewing-soft/70" },
+  offer: { chip: "bg-status-offer-soft text-status-offer-fg", meter: "bg-status-offer", glow: "from-status-offer-soft/70" },
+  accent: { chip: "bg-accent-soft text-accent-fg", meter: "bg-accent", glow: "from-accent-soft/70" },
+};
+
+interface StatItem {
+  label: string;
+  value: number | string;
+  sub: string;
+  tone: StatTone;
+  icon: IconComponent;
+  /** 0–100, drawn as a slim meter under the value. */
+  meter?: number | null;
+  onClick?: () => void;
+}
+
+function Stats({ items }: { items: StatItem[] }) {
   return (
-    <div className="grid grid-cols-2 gap-x-6 gap-y-6 rounded-card border border-line bg-surface px-5 py-5 sm:grid-cols-4 sm:px-6">
+    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
       {items.map((item) => {
+        const tone = STAT_TONE[item.tone];
         const body = (
           <>
-            <span className="block text-ui text-fg-muted">{item.label}</span>
-            <span className="mt-1 block text-[30px] leading-none font-semibold tracking-[-0.03em] text-fg">{item.value}</span>
-            <span className="mt-2 block truncate text-xs text-fg-muted">{item.sub}</span>
+            <span className={cx("pointer-events-none absolute inset-x-0 top-0 h-16 bg-gradient-to-b to-transparent", tone.glow)} aria-hidden="true" />
+            <span className="relative flex items-center justify-between">
+              <span className="text-ui font-medium text-fg-2">{item.label}</span>
+              <span className={cx("flex size-7 items-center justify-center rounded-lg", tone.chip)}>
+                <item.icon size={15} strokeWidth={2} />
+              </span>
+            </span>
+            <span className="relative mt-3 block text-[30px] leading-none font-semibold tracking-[-0.03em] text-fg">{item.value}</span>
+            {item.meter !== undefined && (
+              <span className="relative mt-3 block h-1.5 overflow-hidden rounded-full bg-muted" aria-hidden="true">
+                <span className={cx("block h-full rounded-full", tone.meter)} style={{ width: `${item.meter ?? 0}%` }} />
+              </span>
+            )}
+            <span className="relative mt-auto block truncate pt-2 text-xs text-fg-muted">{item.sub}</span>
           </>
         );
+        const cls = "relative flex min-w-0 flex-col justify-start overflow-hidden rounded-card border border-line bg-surface p-4 text-left";
         return item.onClick ? (
-          <button key={item.label} type="button" onClick={item.onClick} className="-m-2 min-w-0 rounded-lg p-2 text-left transition-colors hover:bg-subtle">
+          <button key={item.label} type="button" onClick={item.onClick} className={cx(cls, "transition-[border-color,box-shadow] hover:border-line-strong hover:shadow-card-hover")}>
             {body}
           </button>
         ) : (
-          <div key={item.label} className="min-w-0">
+          <div key={item.label} className={cls}>
             {body}
           </div>
         );

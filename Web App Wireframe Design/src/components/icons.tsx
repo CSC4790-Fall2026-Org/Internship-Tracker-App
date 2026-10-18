@@ -190,3 +190,4 @@ export const IconSidebar = icon(
     <path d="M9 3.5v17" />
   </>,
 );
+export const IconTrophy = icon(<path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0V4ZM7 6H4.5a2.5 2.5 0 0 0 2.5 5M17 6h2.5a2.5 2.5 0 0 1-2.5 5" />);

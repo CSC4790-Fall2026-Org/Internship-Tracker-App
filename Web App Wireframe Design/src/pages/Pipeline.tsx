@@ -114,14 +114,15 @@ export default function Pipeline({ onNavigate }: PipelineProps) {
                     if (id) moveTo(id, status, { x: e.clientX, y: e.clientY });
                   }}
                   className={cx(
-                    "flex min-h-[calc(100dvh-220px)] flex-col rounded-card border p-1.5 transition-[background-color,border-color] duration-150",
-                    isDropTarget ? "border-accent/40 bg-accent-soft/60" : "border-transparent bg-muted/60",
+                    "flex min-h-[calc(100dvh-220px)] flex-col rounded-card border p-1.5 transition-[background-color,border-color,box-shadow] duration-150",
+                    // Each column wears its stage color, and lights up fully while a card hovers over it.
+                    isDropTarget ? STATUS[status].drop : cx("border-transparent", STATUS[status].column),
                   )}
                 >
                   <header className="flex h-9 items-center gap-2 pr-0.5 pl-2">
                     <StatusDot status={status} />
                     <h2 className="text-ui font-semibold text-fg">{STATUS[status].label}</h2>
-                    <span className="text-xs text-fg-muted tabular-nums">{cards.length}</span>
+                    <span className={cx("min-w-5 rounded-full px-1.5 text-center text-2xs font-semibold tabular-nums", STATUS[status].badge)}>{cards.length}</span>
                     <IconButton icon={IconPlus} size="sm" label={`Add to ${STATUS[status].label}`} onClick={() => onNavigate("add", status)} className="ml-auto" />
                   </header>
                   <div className="flex flex-1 flex-col gap-1.5">
@@ -129,6 +130,7 @@ export default function Pipeline({ onNavigate }: PipelineProps) {
                       <KanbanCard
                         key={app.id}
                         app={app}
+                        edge={STATUS[status].edge}
                         onOpen={() => onNavigate("detail", app.id)}
                         isDragging={draggingId === app.id}
                         onDragStart={() => setDraggingId(app.id)}
@@ -139,7 +141,7 @@ export default function Pipeline({ onNavigate }: PipelineProps) {
                       />
                     ))}
                     {cards.length === 0 && (
-                      <div className={cx("flex flex-1 items-start justify-center rounded-lg border border-dashed px-3 pt-8 text-center text-xs", isDropTarget ? "border-accent/40 text-accent-fg" : "border-line-strong/70 text-fg-muted")}>
+                      <div className={cx("flex flex-1 items-start justify-center rounded-lg border border-dashed px-3 pt-8 text-center text-xs", isDropTarget ? cx("border-current font-medium", STATUS[status].badge.split(" ")[1]) : "border-line-strong/70 text-fg-muted")}>
                         {draggingId ? `Drop to move to ${STATUS[status].label}` : STATUS[status].hint}
                       </div>
                     )}
@@ -185,7 +187,7 @@ function prefersReducedMotion() {
   return typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 }
 
-function KanbanCard({ app, onOpen, isDragging, onDragStart, onDragEnd }: { app: Application; onOpen: () => void; isDragging: boolean; onDragStart: () => void; onDragEnd: () => void }) {
+function KanbanCard({ app, edge, onOpen, isDragging, onDragStart, onDragEnd }: { app: Application; edge: string; onOpen: () => void; isDragging: boolean; onDragStart: () => void; onDragEnd: () => void }) {
   const completed = app.interviewStages.filter((s) => s.completed).length;
   const showDeadline = app.deadline && (app.status === "wishlist" || app.status === "applied");
   return (
@@ -210,7 +212,9 @@ function KanbanCard({ app, onOpen, isDragging, onDragStart, onDragEnd }: { app: 
       }}
       title="Click to open · drag to change stage"
       className={cx(
-        "group cursor-grab rounded-lg border border-line bg-surface p-3 shadow-xs transition-[box-shadow,border-color,opacity] duration-150 hover:border-line-strong hover:shadow-card-hover active:cursor-grabbing",
+        "group relative cursor-grab overflow-hidden rounded-lg border border-line bg-surface p-3 pl-3.5 shadow-xs before:absolute before:inset-y-0 before:left-0 before:w-[3px]",
+        edge,
+        " transition-[box-shadow,border-color,opacity] duration-150 hover:border-line-strong hover:shadow-card-hover active:cursor-grabbing",
         isDragging && "opacity-40",
       )}
     >
