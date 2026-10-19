@@ -151,6 +151,42 @@ export type Database = {
           },
         ]
       }
+      career_log_entries: {
+        Row: {
+          category: string
+          created_at: string
+          date: string
+          details: string
+          id: string
+          impact: string
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          category?: string
+          created_at?: string
+          date?: string
+          details?: string
+          id?: string
+          impact?: string
+          title: string
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          date?: string
+          details?: string
+          id?: string
+          impact?: string
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       contacts: {
         Row: {
           company: string
