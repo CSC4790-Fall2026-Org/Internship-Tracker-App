@@ -376,12 +376,16 @@ export function Avatar({ name, size = 28, className }: { name: string; size?: nu
 
 /** A number (or short label) that settles into place when it changes. Static on first render. */
 export function Ticker({ value, className }: { value: ReactNode; className?: string }) {
-  const seen = useRef(false);
-  useEffect(() => {
-    seen.current = true;
-  });
+  // Animate only when the value itself changes. (Keying the span remounts it, so the animation plays once;
+  // unrelated re-renders keep the same key and class and leave it still.)
+  const last = useRef(value);
+  const changed = useRef(false);
+  if (String(last.current) !== String(value)) {
+    last.current = value;
+    changed.current = true;
+  }
   return (
-    <span key={String(value)} className={cx("inline-block tabular-nums", seen.current && "animate-value-in", className)}>
+    <span key={String(value)} className={cx("inline-block tabular-nums", changed.current && "animate-value-in", className)}>
       {value}
     </span>
   );
