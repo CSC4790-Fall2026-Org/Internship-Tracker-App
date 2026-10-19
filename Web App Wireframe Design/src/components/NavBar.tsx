@@ -20,6 +20,7 @@ import {
   IconSearch,
   IconSidebar,
   IconSun,
+  IconTrophy,
   IconUsers,
   IconX,
   type IconComponent,
@@ -35,7 +36,7 @@ interface ShellProps {
   children: ReactNode;
 }
 
-type NavId = "dashboard" | "pipeline" | "applications" | "calendar" | "jobs" | "networking" | "ai-coach";
+type NavId = "dashboard" | "pipeline" | "applications" | "calendar" | "jobs" | "networking" | "career-log" | "ai-coach";
 
 const NAV: { label: string; items: { id: NavId; label: string; icon: IconComponent }[] }[] = [
   {
@@ -52,6 +53,7 @@ const NAV: { label: string; items: { id: NavId; label: string; icon: IconCompone
     items: [
       { id: "jobs", label: "Jobs", icon: IconBriefcase },
       { id: "networking", label: "Networking", icon: IconUsers },
+      { id: "career-log", label: "Career log", icon: IconTrophy },
       { id: "ai-coach", label: "Profile", icon: IconProfile },
     ],
   },

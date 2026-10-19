@@ -18,10 +18,11 @@ import SearchPalette from "./components/SearchPalette";
 import Calendar from "./pages/Calendar";
 import Networking from "./pages/Networking";
 import Jobs from "./pages/Jobs";
+import CareerLog from "./pages/CareerLog";
 import Onboarding from "./pages/Onboarding";
 import { fetchResumeProfile } from "./data/resume";
 
-type Screen = "dashboard" | "pipeline" | "applications" | "detail" | "calendar" | "networking" | "jobs" | "ai-coach";
+type Screen = "dashboard" | "pipeline" | "applications" | "detail" | "calendar" | "networking" | "jobs" | "career-log" | "ai-coach";
 
 interface Route {
   screen: Screen;
@@ -37,10 +38,11 @@ const TITLES: Record<Screen, string> = {
   calendar: "Calendar",
   networking: "Networking",
   jobs: "Jobs",
+  "career-log": "Career log",
   "ai-coach": "Profile",
 };
 
-const SEGMENT: Partial<Record<Screen, string>> = { pipeline: "board", calendar: "calendar", networking: "networking", jobs: "jobs", "ai-coach": "profile" };
+const SEGMENT: Partial<Record<Screen, string>> = { pipeline: "board", calendar: "calendar", networking: "networking", jobs: "jobs", "career-log": "career-log", "ai-coach": "profile" };
 
 // Screens live in the URL hash so the back button, refresh and shared links keep your place.
 // The hash is only read and written once signed in, after Supabase has consumed any auth tokens in the URL.
@@ -230,6 +232,7 @@ function AuthedApp({ session }: { session: Session }) {
           {screen === "applications" && <ApplicationsTable key={id} onNavigate={navigate} initialStatus={id} />}
           {screen === "detail" && <ApplicationDetail key={id} appId={id} onNavigate={navigate} />}
           {screen === "jobs" && <Jobs onNavigate={navigate} />}
+          {screen === "career-log" && <CareerLog />}
           {screen === "ai-coach" && <AiCoach userId={session.user.id} />}
           {screen === "networking" && <Networking onNavigate={navigate} focusContactId={focusId} onFocusHandled={() => setFocusId("")} />}
           {screen === "calendar" && <Calendar onNavigate={navigate} focusEventId={focusId} onFocusHandled={() => setFocusId("")} />}
