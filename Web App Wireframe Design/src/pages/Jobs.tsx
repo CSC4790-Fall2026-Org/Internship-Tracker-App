@@ -247,23 +247,31 @@ export default function Jobs({ onNavigate }: { onNavigate: (screen: string, id?:
             </Banner>
           )}
 
-          {browse && (
+          {/* The count row is held open while loading so it doesn't push the results down when it arrives. */}
+          {browse ? (
             <ListHeader>
               <span className="font-medium text-fg tabular-nums">{browse.total.toLocaleString()}</span> {browse.search.jobType !== "auto" && JOB_TYPE_LABEL[browse.search.jobType].toLowerCase() + " "}
               {browse.total === 1 ? "job" : "jobs"}
               {browse.search.what && <> for “{browse.search.what}”</>}
               {browse.search.where && <> near {browse.search.where}</>}
             </ListHeader>
+          ) : (
+            !browseError && (
+              <ListHeader>
+                <span className="inline-block h-3.5 w-44 animate-pulse rounded bg-muted align-middle" aria-hidden="true" />
+              </ListHeader>
+            )
           )}
 
-          {!browse && searching ? (
+          {/* Until the first search lands (including while the profile loads), hold the results area with a skeleton. */}
+          {!browse && !browseError ? (
             <JobGridSkeleton />
           ) : browse && browse.jobs.length === 0 ? (
-            <Card>
+            <Card className={cx(RESULTS_MIN_H, "flex flex-col justify-center transition-opacity animate-fade-in", searching && "opacity-50")}>
               <EmptyState icon={IconSearch} title="No jobs match that search" description="Try fewer keywords, or leave the location blank to search everywhere." />
             </Card>
           ) : browse ? (
-            <div className={cx("transition-opacity", searching && browse.page === 1 && "opacity-50")}>
+            <div className={cx("transition-opacity animate-fade-in", searching && browse.page === 1 && "opacity-50")}>
               <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
                 {browse.jobs.map((job) => (
                   <JobCard key={job.id} {...cardProps(job)} />
@@ -309,7 +317,7 @@ function RecommendedView({
 
   if (!profile) {
     return (
-      <Card>
+      <Card className={cx(RESULTS_MIN_H, "flex flex-col justify-center animate-fade-in")}>
         <EmptyState
           icon={IconFile}
           title="Add your resume to get matches"
@@ -638,11 +646,17 @@ function ListHeader({ children }: { children: ReactNode }) {
   );
 }
 
+/**
+ * Loading and empty states share one height: two rows of fixed-height placeholder cards (two cards on phones,
+ * four in two columns from lg). Swapping one for the other then never moves anything below.
+ */
+const RESULTS_MIN_H = "min-h-[412px]";
+
 function JobGridSkeleton() {
   return (
-    <div className="grid grid-cols-1 gap-3 lg:grid-cols-2" role="status" aria-label="Loading jobs">
+    <div className={cx("grid grid-cols-1 gap-3 lg:grid-cols-2", RESULTS_MIN_H)} role="status" aria-label="Loading jobs">
       {Array.from({ length: 4 }, (_, i) => (
-        <Card key={i} className="space-y-3 p-4">
+        <Card key={i} className={cx("h-[200px] space-y-3 overflow-hidden p-4", i >= 2 && "max-lg:hidden")}>
           <div className="flex gap-3">
             <Skeleton className="size-9 rounded-lg" />
             <div className="flex-1 space-y-2">
