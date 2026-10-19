@@ -191,7 +191,8 @@ export function usePresence<T>(items: T[], keyOf: (item: T) => string, exitMs = 
 /**
  * After every commit, any `[data-flip]` element inside `container` that moved since the previous commit
  * glides from its old position to its new one. An element can be given an explicit starting rect
- * (e.g. where a dragged card was dropped) through `startAt`. Transforms only, so layout never waits.
+ * (e.g. where a dragged card was dropped, in viewport coordinates) through `startAt`. Transforms only, so layout never waits.
+ * Positions are measured against the container, so scrolling it (or the page) doesn't count as moving.
  */
 export function useFlip(container: RefObject<HTMLElement | null>, startAt?: RefObject<Map<string, { left: number; top: number }>>) {
   const last = useRef(new Map<string, { left: number; top: number }>());
@@ -200,15 +201,17 @@ export function useFlip(container: RefObject<HTMLElement | null>, startAt?: RefO
     if (!root) return;
     const reduce = prefersReducedMotion();
     const next = new Map<string, { left: number; top: number }>();
+    const origin = root.getBoundingClientRect();
     for (const el of root.querySelectorAll<HTMLElement>("[data-flip]")) {
       const key = el.dataset.flip!;
       const visual = el.getBoundingClientRect();
       // Strip any in-flight translate so we compare true layout positions.
       const m = new DOMMatrixReadOnly(getComputedStyle(el).transform === "none" ? undefined : getComputedStyle(el).transform);
-      const layout = { left: visual.left - m.e, top: visual.top - m.f };
+      const layout = { left: visual.left - m.e - origin.left, top: visual.top - m.f - origin.top };
       next.set(key, layout);
-      const from = startAt?.current?.get(key) ?? last.current.get(key);
+      const start = startAt?.current?.get(key);
       startAt?.current?.delete(key);
+      const from = start ? { left: start.left - origin.left, top: start.top - origin.top } : last.current.get(key);
       if (!from || reduce) continue;
       const dx = from.left - layout.left;
       const dy = from.top - layout.top;
