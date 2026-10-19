@@ -555,15 +555,16 @@ function JobCard({ job, recommendation, tracked, askedAboutApplying, saving, onA
       </div>
 
       {recommendation ? (
-        <div className="rounded-lg bg-subtle px-3 py-2.5">
-          <p className="flex gap-2 text-ui leading-relaxed text-fg-2">
-            <IconSparkles size={14} className="mt-[3px] text-accent" />
-            <span>{recommendation.reason}</span>
+        <div className="rounded-lg border border-accent/20 bg-accent-soft px-3 py-2.5">
+          <p className="mb-1 flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-wide text-accent-fg">
+            <IconSparkles size={12} />
+            AI insight
           </p>
+          <p className="text-ui leading-relaxed text-fg">{recommendation.reason}</p>
           {recommendation.matchedSkills.length > 0 && (
-            <div className="mt-2 flex flex-wrap gap-1 pl-[22px]">
+            <div className="mt-2 flex flex-wrap gap-1">
               {recommendation.matchedSkills.map((skill) => (
-                <span key={skill} className="rounded-full border border-line bg-surface px-2 py-px text-2xs font-medium text-fg-2">
+                <span key={skill} className="rounded-full border border-accent/20 bg-surface px-2 py-px text-2xs font-medium text-accent-fg">
                   {skill}
                 </span>
               ))}
