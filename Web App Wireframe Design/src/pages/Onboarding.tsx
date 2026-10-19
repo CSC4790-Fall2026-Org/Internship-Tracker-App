@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
-import { uploadAndParseResume, type ResumeProfile, type UploadStage } from "../data/resume";
+import { saveCareerStage, uploadAndParseResume, type ResumeProfile, type UploadStage } from "../data/resume";
+import { CAREER_STAGES, type JobType } from "../data/jobs";
 import { Banner, Button, cx, Spinner } from "../components/ui";
 import { BrandMark } from "../components/NavBar";
 import { IconAlertCircle, IconCheck, IconUpload } from "../components/icons";
@@ -12,6 +13,7 @@ interface OnboardingProps {
 }
 
 export default function Onboarding({ userId, userName, onFinish }: OnboardingProps) {
+  const [step, setStep] = useState<"looking-for" | "resume">("looking-for");
   const [stage, setStage] = useState<UploadStage | null>(null);
   const [profile, setProfile] = useState<ResumeProfile | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -41,7 +43,9 @@ export default function Onboarding({ userId, userName, onFinish }: OnboardingPro
         </div>
 
         <div className="rounded-dialog border border-line bg-surface p-6 shadow-xs sm:p-8">
-          {profile ? (
+          {step === "looking-for" ? (
+            <LookingFor firstName={firstName} onDone={() => setStep("resume")} />
+          ) : profile ? (
             <ProfileConfirmation
               profile={profile}
               onFinish={onFinish}
@@ -52,9 +56,9 @@ export default function Onboarding({ userId, userName, onFinish }: OnboardingPro
             />
           ) : (
             <>
-              <p className="text-ui font-medium text-accent-fg">One optional step</p>
-              <h1 className="mt-1.5 text-xl font-semibold tracking-[-0.015em] text-fg">Welcome, {firstName}</h1>
-              <p className="mt-1.5 text-sm leading-relaxed text-fg-muted">Add your resume and we'll pull out your skills, experience and preferences. It powers your job matches, and you won't have to retype any of it.</p>
+              <p className="text-ui font-medium text-accent-fg">Step 2 of 2 · Optional</p>
+              <h1 className="mt-1.5 text-xl font-semibold tracking-[-0.015em] text-fg">Add your resume</h1>
+              <p className="mt-1.5 text-sm leading-relaxed text-fg-muted">We'll pull out your skills, experience and preferences. It powers your job matches, and you won't have to retype any of it.</p>
 
               {error && (
                 <Banner icon={IconAlertCircle} className="mt-5">
@@ -120,12 +124,78 @@ export default function Onboarding({ userId, userName, onFinish }: OnboardingPro
   );
 }
 
+function LookingFor({ firstName, onDone }: { firstName: string; onDone: () => void }) {
+  const [choice, setChoice] = useState<JobType | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const next = async () => {
+    if (!choice) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await saveCareerStage(choice);
+      onDone();
+    } catch (e) {
+      setError((e as Error).message);
+      setSaving(false);
+    }
+  };
+
+  return (
+    <>
+      <p className="text-ui font-medium text-accent-fg">Step 1 of 2</p>
+      <h1 className="mt-1.5 text-xl font-semibold tracking-[-0.015em] text-fg">Welcome, {firstName}</h1>
+      <p className="mt-1.5 text-sm leading-relaxed text-fg-muted">What are you looking for? This decides which listings the Jobs page finds for you.</p>
+
+      {error && (
+        <Banner icon={IconAlertCircle} className="mt-5">
+          Couldn't save that: {error}
+        </Banner>
+      )}
+
+      <div role="radiogroup" aria-label="What are you looking for?" className="mt-5 space-y-2">
+        {CAREER_STAGES.map((option) => {
+          const selected = choice === option.value;
+          return (
+            <button
+              key={option.value}
+              type="button"
+              role="radio"
+              aria-checked={selected}
+              onClick={() => setChoice(option.value)}
+              className={cx(
+                "tactile-soft flex w-full items-center gap-3 rounded-lg border px-3.5 py-3 text-left transition-colors",
+                selected ? "border-accent bg-accent-soft" : "border-line bg-surface hover:border-line-strong hover:bg-subtle",
+              )}
+            >
+              <span className={cx("flex size-4 shrink-0 items-center justify-center rounded-full border", selected ? "border-accent bg-accent text-white" : "border-line-strong bg-surface")} aria-hidden="true">
+                {selected && <IconCheck size={10} strokeWidth={3} />}
+              </span>
+              <span className="min-w-0">
+                <span className="block text-sm font-medium text-fg">{option.label}</span>
+                <span className="block text-xs text-fg-muted">{option.hint}</span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      <Button variant="primary" size="lg" onClick={next} loading={saving} disabled={!choice} className="mt-6 w-full">
+        Continue
+      </Button>
+      <p className="mt-2.5 text-center text-xs text-fg-muted">You can change this any time on the Jobs or Profile page.</p>
+    </>
+  );
+}
+
 function ProfileConfirmation({ profile, onFinish, onRetry }: { profile: ResumeProfile; onFinish: () => void; onRetry: () => void }) {
   const rows = [
     { label: "Name", value: profile.full_name },
     { label: "School", value: profile.school },
     { label: "Major", value: profile.major },
     { label: "Graduation", value: profile.graduation },
+    { label: "Looking for", value: CAREER_STAGES.find((s) => s.value === profile.job_type && s.value !== "auto")?.hint ?? "" },
     { label: "Skills", value: profile.skills.slice(0, 6).join(", ") + (profile.skills.length > 6 ? ` +${profile.skills.length - 6} more` : "") },
     { label: "Experience", value: `${profile.experience.length} ${profile.experience.length === 1 ? "entry" : "entries"}` },
   ].filter((row) => row.value);

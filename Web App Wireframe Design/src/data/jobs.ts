@@ -45,6 +45,15 @@ export const JOB_TYPE_LABEL: Record<JobType, string> = {
   part_time: "Part-time",
 };
 
+/** The same choice phrased as where someone is in their career, for onboarding and Profile. */
+export const CAREER_STAGES: { value: JobType; label: string; hint: string }[] = [
+  { value: "internship", label: "Student looking for internships", hint: "Internships and co-ops" },
+  { value: "new_grad", label: "Graduating within a year, or a recent grad", hint: "Full-time new grad and entry-level roles" },
+  { value: "full_time", label: "Working, looking for my next role", hint: "Full-time roles, no internships" },
+  { value: "part_time", label: "Looking for part-time work", hint: "Part-time roles" },
+  { value: "auto", label: "Not sure yet", hint: "We'll go by your graduation date" },
+];
+
 export interface JobSearch {
   what: string;
   where: string;
