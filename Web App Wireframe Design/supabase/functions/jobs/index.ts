@@ -12,9 +12,9 @@
 // Every user of the app shares one Adzuna quota (free tier: 25/min, 250/day, 2,500/month),
 // so recommendations are saved to job_recommendations and refreshes have a cooldown.
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
-
 // Same model as parse-resume: strict JSON schemas on Groq only work on the gpt-oss models.
-const GROQ_MODEL = "openai/gpt-oss-120b";
+import { GROQ_CHAT_URL, GROQ_MODEL } from "../_shared/groq.ts";
+
 const ADZUNA_COUNTRY = "us";
 const PAGE_SIZE = 20;
 const MAX_CANDIDATES = 40;
@@ -199,7 +199,7 @@ async function groqJson<T>(
   system: string,
   user: string,
 ): Promise<T> {
-  const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+  const res = await fetch(GROQ_CHAT_URL, {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
     body: JSON.stringify({

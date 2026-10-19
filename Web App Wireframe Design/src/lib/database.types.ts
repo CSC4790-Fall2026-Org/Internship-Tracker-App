@@ -151,6 +151,53 @@ export type Database = {
           },
         ]
       }
+      career_log_entries: {
+        Row: {
+          application_id: string | null
+          category: string
+          created_at: string
+          date: string
+          details: string
+          id: string
+          impact: string
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          application_id?: string | null
+          category?: string
+          created_at?: string
+          date?: string
+          details?: string
+          id?: string
+          impact?: string
+          title: string
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          application_id?: string | null
+          category?: string
+          created_at?: string
+          date?: string
+          details?: string
+          id?: string
+          impact?: string
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "career_log_entries_application_id_fkey"
+            columns: ["application_id"]
+            isOneToOne: false
+            referencedRelation: "applications"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       contacts: {
         Row: {
           company: string

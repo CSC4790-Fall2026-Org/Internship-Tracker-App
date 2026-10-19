@@ -12,11 +12,14 @@ import {
   IconBriefcase,
   IconCalendar,
   IconDashboard,
+  IconFile,
   IconList,
   IconPlus,
   IconProfile,
   IconSearch,
+  IconSparkles,
   IconTaskSquare,
+  IconTrophy,
   IconUsers,
   type IconComponent,
 } from "./icons";
@@ -46,6 +49,9 @@ const PAGES: { label: string; screen: string; hint: string; icon: IconComponent 
   { label: "Calendar", screen: "calendar", hint: "Month and week views", icon: IconCalendar },
   { label: "Jobs", screen: "jobs", hint: "Matches from your resume and job search", icon: IconBriefcase },
   { label: "Networking", screen: "networking", hint: "Contacts and outreach", icon: IconUsers },
+  { label: "Career log", screen: "career-log", hint: "Accomplishments, projects, feedback, skills, milestones", icon: IconTrophy },
+  { label: "Brag doc", screen: "brag-doc", hint: "Your wins grouped by period, ready to copy", icon: IconFile },
+  { label: "Career coach", screen: "coach", hint: "AI advice grounded in your applications and career log", icon: IconSparkles },
   { label: "Profile", screen: "ai-coach", hint: "Resume and extracted profile", icon: IconProfile },
 ];
 

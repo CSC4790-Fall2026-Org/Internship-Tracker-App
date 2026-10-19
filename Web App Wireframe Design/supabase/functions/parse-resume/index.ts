@@ -8,10 +8,9 @@
 // That means a scanned/image-only resume yields nothing - handled explicitly below.
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { extractText, getDocumentProxy } from "npm:unpdf";
-
 // Strict structured outputs on Groq are limited to the gpt-oss models; on others the
-// schema is best-effort. Change this and you may lose the schema guarantee.
-const GROQ_MODEL = "openai/gpt-oss-120b";
+// schema is best-effort. Change GROQ_MODEL and you may lose the schema guarantee.
+import { GROQ_CHAT_URL, GROQ_MODEL } from "../_shared/groq.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -138,7 +137,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const groqResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    const groqResponse = await fetch(GROQ_CHAT_URL, {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({
