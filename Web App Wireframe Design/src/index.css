@@ -1,79 +1,370 @@
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Figtree:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap');
 @import 'tailwindcss';
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-card: var(--card);
-  --color-card-foreground: var(--card-foreground);
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-secondary: var(--secondary);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-muted: var(--muted);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-border: var(--border);
-  --color-ring: var(--ring);
-  --radius-default: var(--radius);
-  --font-sans: var(--font-body);
-  --font-display: var(--font-heading);
-  --font-mono: var(--font-mono-base);
+/*
+ * Design tokens. One sans family (Geist) carries every level of the hierarchy through size and weight.
+ * Neutrals do the structural work; color is reserved for meaning:
+ *   status hues identify pipeline stages, red = overdue/destructive, amber = due soon, accent = focus/links.
+ * The three chromatic status hues were checked as an adjacent categorical set (CVD + contrast);
+ * Wishlist and Closed are deliberately neutral and are told apart by lightness and dot shape.
+ */
+@theme {
+  --font-sans: 'Geist', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', 'Menlo', monospace;
+
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 1rem;
+  --text-ui: 0.8125rem;
+  --text-ui--line-height: 1.25rem;
+
+  /* Surfaces & lines */
+  --color-canvas: #F7F7F8;
+  --color-surface: #FFFFFF;
+  --color-subtle: #FAFAFB;
+  --color-muted: #F3F3F5;
+  --color-muted-strong: #E9E9EC;
+  --color-line: #E6E6EA;
+  --color-line-strong: #D5D5DB;
+
+  /* Text */
+  --color-fg: #18181B;
+  --color-fg-2: #3F3F46;
+  --color-fg-muted: #6E6E78;
+  --color-fg-faint: #A1A1AA;
+
+  /* Actions */
+  --color-ink: #18181B;
+  --color-ink-hover: #303036;
+  --color-on-ink: #FFFFFF;
+  /* Tooltips and toasts: a dark chip in both themes. */
+  --color-inverse: #18181B;
+  --color-accent: #4B57D6;
+  --color-accent-hover: #3E49BE;
+  --color-accent-soft: #EEF0FC;
+  --color-accent-fg: #3742AE;
+
+  /* Semantic */
+  --color-danger: #DC2626;
+  --color-danger-hover: #BE1E1E;
+  --color-danger-soft: #FEF2F2;
+  --color-danger-fg: #B91C1C;
+  --color-danger-line: #F8D3D3;
+  --color-warning: #D97706;
+  --color-warning-soft: #FFF8EB;
+  --color-warning-fg: #9A4D06;
+  --color-warning-line: #F5DFB3;
+  --color-success: #12996A;
+  --color-success-soft: #EAF7F1;
+  --color-success-fg: #0B7A53;
+  --color-success-line: #C3E9D8;
+
+  /* Pipeline stages: mark (dots, chart fills), soft (badge fill), fg (badge text) */
+  --color-status-wishlist: #A1A1AA;
+  --color-status-wishlist-soft: #F3F3F5;
+  --color-status-wishlist-fg: #52525B;
+  --color-status-applied: #2A78D6;
+  --color-status-applied-soft: #EBF3FD;
+  --color-status-applied-fg: #1D5FB3;
+  --color-status-interviewing: #E8622C;
+  --color-status-interviewing-soft: #FDF0EA;
+  --color-status-interviewing-fg: #B1431A;
+  --color-status-offer: #12996A;
+  --color-status-offer-soft: #E8F7F0;
+  --color-status-offer-fg: #0B7A53;
+  --color-status-rejected: #71717A;
+  --color-status-rejected-soft: #EFEFF2;
+  --color-status-rejected-fg: #4A4A52;
+
+  /* Calendar item kinds */
+  --color-kind-deadline: #DC2626;
+  --color-kind-interview: #E8622C;
+  --color-kind-event: #4B57D6;
+  --color-kind-task: #71717A;
+
+  --radius-card: 10px;
+  --radius-dialog: 14px;
+
+  --shadow-xs: 0 1px 2px rgb(16 16 20 / 0.05);
+  --shadow-card-hover: 0 1px 2px rgb(16 16 20 / 0.04), 0 4px 12px -4px rgb(16 16 20 / 0.10);
+  --shadow-pop: 0 0 0 1px rgb(16 16 20 / 0.06), 0 10px 28px -8px rgb(16 16 20 / 0.20);
+  --shadow-dialog: 0 0 0 1px rgb(16 16 20 / 0.06), 0 28px 70px -16px rgb(16 16 20 / 0.32);
+
+  /*
+   * Motion. Springs are damped-spring step responses sampled into linear() (see src/lib/motion.ts):
+   * --ease-spring (~1.5% overshoot) for things that travel, --ease-snappy (~0.5%) for presses and bars.
+   * Durations: ~140ms presses and colour, ~220ms overlays and fades, ~340ms travel, ~600ms first-load settle.
+   */
+  --ease-spring: linear(0, 0.0467, 0.1557, 0.2919, 0.4324, 0.5634, 0.6775, 0.772, 0.8469, 0.9039, 0.9455, 0.9746, 0.9938, 1.0056, 1.012, 1.0147, 1.0151, 1.014, 1.0121, 1.01, 1.0079, 1.006, 1.0044, 1.003, 1);
+  --ease-snappy: linear(0, 0.0459, 0.1517, 0.2824, 0.4162, 0.5406, 0.6491, 0.7397, 0.8126, 0.8694, 0.9123, 0.9439, 0.9664, 0.9819, 0.9921, 0.9985, 1.0023, 1.0042, 1.005, 1.0049, 1.0045, 1.0039, 1.0032, 1.0026, 1);
+  --ease-fluid: cubic-bezier(0.2, 0.9, 0.3, 1);
+
+  --animate-fade-in: fade-in 160ms ease-out;
+  --animate-pop-in: pop-in 240ms var(--ease-spring);
+  --animate-menu-in: menu-in 180ms var(--ease-snappy);
+  --animate-slide-in: slide-in 280ms var(--ease-snappy);
+  --animate-toast-in: toast-in 300ms var(--ease-spring);
+  /* Entrance for a screen's major blocks; paired with an inline animation-delay for the stagger. */
+  --animate-rise: rise 420ms var(--ease-spring) backwards;
+  /* A number that just changed settles into place. */
+  --animate-value-in: value-in 260ms var(--ease-snappy);
+  /* List rows grow in, or hold briefly then collapse out. Rows sit in a one-row grid so height can animate. */
+  --animate-row-in: row-in 260ms var(--ease-fluid);
+  --animate-row-out: row-out 240ms var(--ease-fluid) 110ms forwards;
+  --animate-check-pop: check-pop 280ms var(--ease-spring);
+  --animate-check-draw: check-draw 220ms var(--ease-fluid) 40ms backwards;
+  --animate-bar-grow: bar-grow 700ms var(--ease-snappy) 120ms backwards;
+
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes pop-in {
+    from { opacity: 0; transform: translateY(8px) scale(0.98); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes menu-in {
+    from { opacity: 0; transform: translateY(var(--menu-shift, -4px)) scale(0.97); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes slide-in {
+    from { transform: translateX(-100%); }
+    to { transform: none; }
+  }
+  @keyframes toast-in {
+    from { opacity: 0; transform: translateY(12px) scale(0.97); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(8px); }
+  }
+  @keyframes value-in {
+    from { opacity: 0.25; transform: translateY(0.18em); }
+  }
+  @keyframes row-in {
+    from { grid-template-rows: 0fr; opacity: 0; }
+  }
+  @keyframes row-out {
+    to { grid-template-rows: 0fr; opacity: 0; }
+  }
+  @keyframes check-pop {
+    0% { transform: scale(0.8); }
+  }
+  @keyframes check-draw {
+    from { stroke-dashoffset: 24; }
+  }
+  @keyframes bar-grow {
+    from { transform: scaleX(0); }
+  }
 }
 
+/*
+ * Tactile feedback. Colour changes ease out quickly; scale/translate use springs so presses snap in
+ * and release with a little give. `scale` and `translate` are the individual transform properties,
+ * so they never fight a component's own `transform`.
+ */
+@utility tactile {
+  transition-property: color, background-color, border-color, box-shadow, opacity, scale, translate;
+  transition-duration: 140ms, 140ms, 140ms, 140ms, 140ms, 320ms, 320ms;
+  transition-timing-function: ease-out, ease-out, ease-out, ease-out, ease-out, var(--ease-snappy), var(--ease-snappy);
+  &:active:not(:disabled, [aria-disabled='true']) {
+    scale: 0.97;
+    transition-duration: 140ms, 140ms, 140ms, 140ms, 140ms, 70ms, 70ms;
+  }
+}
+/* Gentler press for wide targets (nav rows, list rows), where 3% would visibly shear the text. */
+@utility tactile-soft {
+  transition-property: color, background-color, border-color, box-shadow, opacity, scale;
+  transition-duration: 140ms, 140ms, 140ms, 140ms, 140ms, 320ms;
+  transition-timing-function: ease-out, ease-out, ease-out, ease-out, ease-out, var(--ease-snappy);
+  &:active:not(:disabled, [aria-disabled='true']) {
+    scale: 0.985;
+    transition-duration: 140ms, 140ms, 140ms, 140ms, 140ms, 70ms;
+  }
+}
+/* Clickable cards: rise 1px with their shadow on hover, settle on press. */
+@utility lift {
+  transition-property: border-color, background-color, box-shadow, opacity, scale, translate;
+  transition-duration: 160ms, 160ms, 200ms, 160ms, 320ms, 320ms;
+  transition-timing-function: ease-out, ease-out, ease-out, ease-out, var(--ease-snappy), var(--ease-spring);
+  @media (hover: hover) {
+    &:hover:not(:disabled) {
+      translate: 0 -1px;
+    }
+  }
+  &:active:not(:disabled) {
+    translate: 0 0;
+    scale: 0.99;
+    transition-duration: 160ms, 160ms, 200ms, 160ms, 80ms, 80ms;
+  }
+}
+
+/*
+ * Dark theme: the same token names, re-pointed. `data-theme` on <html> is set by src/lib/theme.ts
+ * (and by the inline script in index.html before first paint, so there's no light flash).
+ * Surfaces step up in lightness instead of relying on shadows; soft fills are low-chroma tints of each hue.
+ */
+/* Conversion steps (one hue, light → dark). Read from inline styles, so declared outside @theme. */
 :root {
-  --background: #F4F6FB;
-  --foreground: #0F172A;
-  --card: #FFFFFF;
-  --card-foreground: #0F172A;
-  --primary: #2563EB;
-  --primary-foreground: #FFFFFF;
-  --secondary: #EEF2FF;
-  --secondary-foreground: #3730A3;
-  --muted: #F1F5F9;
-  --muted-foreground: #64748B;
-  --accent: #DBEAFE;
-  --accent-foreground: #1E40AF;
-  --border: #E2E8F0;
-  --ring: #93C5FD;
-  --radius: 10px;
-
-  --font-heading: 'Outfit', system-ui, sans-serif;
-  --font-body: 'Figtree', system-ui, sans-serif;
-  --font-mono-base: 'JetBrains Mono', monospace;
+  --color-funnel-1: #86B6EF;
+  --color-funnel-2: #5598E7;
+  --color-funnel-3: #256ABF;
+  --color-funnel-4: #104281;
 }
 
-html, body, #root {
-  height: 100%;
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --color-canvas: #0E0E10;
+  --color-surface: #17171A;
+  --color-subtle: #1B1B1F;
+  --color-muted: #222227;
+  --color-muted-strong: #2B2B31;
+  --color-line: #29292F;
+  --color-line-strong: #393941;
+
+  --color-fg: #EDEDEF;
+  --color-fg-2: #C6C6CD;
+  --color-fg-muted: #8E8E99;
+  --color-fg-faint: #5F5F69;
+
+  --color-ink: #EDEDEF;
+  --color-ink-hover: #D4D4D9;
+  --color-on-ink: #17171A;
+  --color-inverse: #2E2E35;
+  --color-accent: #7C86F2;
+  --color-accent-hover: #949CF5;
+  --color-accent-soft: #1E2140;
+  --color-accent-fg: #ADB3F8;
+
+  --color-danger: #E5484D;
+  --color-danger-hover: #EC5D62;
+  --color-danger-soft: #2B1416;
+  --color-danger-fg: #FF8A8A;
+  --color-danger-line: #4D2226;
+  --color-warning: #F0A030;
+  --color-warning-soft: #2A1F0C;
+  --color-warning-fg: #F5BE6A;
+  --color-warning-line: #4A3612;
+  --color-success: #2BB383;
+  --color-success-soft: #0F2A20;
+  --color-success-fg: #5FD3A6;
+  --color-success-line: #174A36;
+
+  --color-status-wishlist: #6E6E78;
+  --color-status-wishlist-soft: #232328;
+  --color-status-wishlist-fg: #B4B4BC;
+  --color-status-applied: #4A90E2;
+  --color-status-applied-soft: #13233A;
+  --color-status-applied-fg: #8EBBF2;
+  --color-status-interviewing: #F07A45;
+  --color-status-interviewing-soft: #331A10;
+  --color-status-interviewing-fg: #F6A57F;
+  --color-status-offer: #2BB383;
+  --color-status-offer-soft: #0F2A20;
+  --color-status-offer-fg: #5FD3A6;
+  --color-status-rejected: #85858E;
+  --color-status-rejected-soft: #25252A;
+  --color-status-rejected-fg: #A8A8B0;
+
+  /* Reversed lightness so the last step still stands out on a dark surface. */
+  --color-funnel-1: #2C5C99;
+  --color-funnel-2: #3F7FCF;
+  --color-funnel-3: #6AA2E8;
+  --color-funnel-4: #A3C7F3;
+
+  --color-kind-deadline: #E5484D;
+  --color-kind-interview: #F07A45;
+  --color-kind-event: #7C86F2;
+  --color-kind-task: #85858E;
+
+  --shadow-xs: 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow-card-hover: 0 0 0 1px rgb(255 255 255 / 0.04), 0 6px 16px -6px rgb(0 0 0 / 0.6);
+  --shadow-pop: 0 0 0 1px rgb(255 255 255 / 0.08), 0 12px 32px -8px rgb(0 0 0 / 0.7);
+  --shadow-dialog: 0 0 0 1px rgb(255 255 255 / 0.08), 0 28px 70px -16px rgb(0 0 0 / 0.8);
 }
 
-body {
-  background-color: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-body);
-  -webkit-font-smoothing: antialiased;
+@layer base {
+  html,
+  body,
+  #root {
+    min-height: 100%;
+  }
+
+  body {
+    background-color: var(--color-canvas);
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+    font-size: 0.875rem;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    background: color-mix(in oklab, var(--color-accent) 22%, transparent);
+  }
+
+  /* Tailwind v4 resets buttons to the default cursor. */
+  button:not(:disabled),
+  [role='button']:not([aria-disabled='true']),
+  select:not(:disabled),
+  summary {
+    cursor: pointer;
+  }
+
+  /* One focus treatment everywhere; form fields replace it with their own ring.
+     The resting outline color matches the ring, so `transition-colors` (which includes outline-color)
+     doesn't fade it in from the text color on every focus. */
+  :where(*) {
+    outline-color: var(--color-accent);
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+
+  input[type='date']::-webkit-calendar-picker-indicator,
+  input[type='time']::-webkit-calendar-picker-indicator {
+    opacity: 0.55;
+    cursor: pointer;
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-line-strong) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: var(--color-line-strong);
+    border-radius: 999px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
 }
 
-* {
-  scrollbar-width: none;
-}
-*::-webkit-scrollbar {
-  display: none;
-}
-*:hover {
-  scrollbar-width: thin;
-  scrollbar-color: var(--border) transparent;
-}
-*:hover::-webkit-scrollbar {
-  display: block;
-  width: 4px;
-  height: 4px;
-}
-*:hover::-webkit-scrollbar-track {
-  background: transparent;
-}
-*:hover::-webkit-scrollbar-thumb {
-  background: var(--border);
-  border-radius: 4px;
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0s !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0s !important;
+    scroll-behavior: auto !important;
+  }
+  /* No movement at all: presses and hovers keep their colour feedback only. */
+  .tactile,
+  .tactile-soft,
+  .lift {
+    scale: none !important;
+    translate: none !important;
+  }
 }

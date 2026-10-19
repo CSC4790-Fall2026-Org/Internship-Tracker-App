@@ -1,78 +1,140 @@
-import { useState, useMemo, useRef } from "react";
-import type { AppStatus } from "../data/types";
+import { useMemo, useRef, useState } from "react";
+import type { Application, AppStatus } from "../data/types";
 import { useData } from "../data/DataContext";
-import { toDate } from "../data/dates";
+import { STATUS, STATUS_ORDER } from "../data/status";
+import { formatDate } from "../data/dates";
 import { applicationsToCsv, csvToApplications, downloadCsv, exportFilename } from "../data/csv";
 import { roleKey } from "../data/jobs";
-
-const STATUS_META: Record<AppStatus, { label: string; color: string; bg: string }> = {
-  wishlist:     { label: "Wishlist",      color: "#64748B", bg: "#F1F5F9" },
-  applied:      { label: "Applied",       color: "#2563EB", bg: "#DBEAFE" },
-  interviewing: { label: "Interviewing",  color: "#D97706", bg: "#FEF3C7" },
-  offer:        { label: "Offer",         color: "#059669", bg: "#DCFCE7" },
-  rejected:     { label: "Closed",        color: "#DC2626", bg: "#FEE2E2" },
-};
+import { Button, Card, Checkbox, CompanyLogo, cx, DueChip, EmptyState, Input, Page, PageHeader, Select, StatusDot, StatusSelect } from "../components/ui";
+import { useFeedback, errorMessage } from "../components/feedback";
+import { IconArrowUp, IconChevronRight, IconDownload, IconList, IconPlus, IconSearch, IconTrash, IconUpload, IconX } from "../components/icons";
 
 type SortField = "company" | "position" | "status" | "appliedDate" | "deadline" | "salary" | "location";
 
-interface ApplicationsTableProps {
-  onNavigate: (screen: string, id?: string) => void;
+const COLUMNS: { label: string; field: SortField; className?: string }[] = [
+  { label: "Company", field: "company", className: "w-[200px]" },
+  { label: "Position", field: "position" },
+  { label: "Status", field: "status", className: "w-[140px]" },
+  { label: "Applied", field: "appliedDate", className: "w-[104px]" },
+  { label: "Deadline", field: "deadline", className: "w-[112px]" },
+  { label: "Location", field: "location", className: "w-[180px]" },
+  { label: "Pay", field: "salary", className: "w-[104px]" },
+];
+
+/** Rough annualized number for sorting free-text pay like "$42/hr", "$120k" or "$85,000". */
+function payValue(salary: string): number | null {
+  const match = salary.replace(/,/g, "").match(/(\d+(?:\.\d+)?)\s*(k)?/i);
+  if (!match) return null;
+  let n = parseFloat(match[1]) * (match[2] ? 1000 : 1);
+  if (/hr|hour/i.test(salary) || n < 300) n *= 2080;
+  return n;
 }
 
-export default function ApplicationsTable({ onNavigate }: ApplicationsTableProps) {
-  const { applications, deleteApplications, importApplications } = useData();
+function sortValue(app: Application, field: SortField): string | number | null {
+  if (field === "status") return STATUS_ORDER.indexOf(app.status);
+  if (field === "salary") return payValue(app.salary);
+  const v = app[field];
+  return v ? v.toLowerCase() : null;
+}
+
+interface ApplicationsTableProps {
+  onNavigate: (screen: string, id?: string) => void;
+  /** Status filter to start with, e.g. when arriving from a dashboard tile. */
+  initialStatus?: string;
+}
+
+export default function ApplicationsTable({ onNavigate, initialStatus }: ApplicationsTableProps) {
+  const { applications, deleteApplications, importApplications, updateApplication } = useData();
+  const { toast, confirm } = useFeedback();
   const [deleting, setDeleting] = useState(false);
   const [importing, setImporting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [sortField, setSortField] = useState<SortField>("deadline");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
-  const [filterStatus, setFilterStatus] = useState<AppStatus | "all">("all");
+  const [filterStatus, setFilterStatus] = useState<AppStatus | "all">(STATUS_ORDER.includes(initialStatus as AppStatus) ? (initialStatus as AppStatus) : "all");
   const [search, setSearch] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const handleSort = (field: SortField) => {
     if (sortField === field) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    else { setSortField(field); setSortDir("asc"); }
+    else {
+      setSortField(field);
+      setSortDir("asc");
+    }
   };
+
+  const counts = useMemo(() => {
+    const c = Object.fromEntries(STATUS_ORDER.map((s) => [s, 0])) as Record<AppStatus, number>;
+    for (const a of applications) c[a.status] += 1;
+    return c;
+  }, [applications]);
 
   const filtered = useMemo(() => {
     let rows = [...applications];
     if (filterStatus !== "all") rows = rows.filter((a) => a.status === filterStatus);
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      rows = rows.filter((a) =>
-        a.company.toLowerCase().includes(q) ||
-        a.position.toLowerCase().includes(q) ||
-        a.location.toLowerCase().includes(q)
-      );
-    }
+    const q = search.trim().toLowerCase();
+    if (q) rows = rows.filter((a) => [a.company, a.position, a.location, a.notes].some((f) => f.toLowerCase().includes(q)));
     rows.sort((a, b) => {
-      const av: string = (a as unknown as Record<string, string>)[sortField] ?? "";
-      const bv: string = (b as unknown as Record<string, string>)[sortField] ?? "";
+      const av = sortValue(a, sortField);
+      const bv = sortValue(b, sortField);
+      // Blanks sink to the bottom whichever way you sort.
+      if (av === null || bv === null) return av === bv ? 0 : av === null ? 1 : -1;
       const cmp = av < bv ? -1 : av > bv ? 1 : 0;
-      return sortDir === "asc" ? cmp : -cmp;
+      return (sortDir === "asc" ? cmp : -cmp) || a.company.localeCompare(b.company);
     });
     return rows;
   }, [applications, sortField, sortDir, filterStatus, search]);
 
+  // Selection only counts rows you can see, so filtering never acts on hidden applications.
+  const visibleSelected = filtered.filter((a) => selectedIds.has(a.id));
+  const allSelected = filtered.length > 0 && visibleSelected.length === filtered.length;
+  const toggleAll = () => setSelectedIds(allSelected ? new Set() : new Set(filtered.map((r) => r.id)));
+  const toggleRow = (id: string) =>
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
   const handleDelete = async () => {
-    const n = selectedIds.size;
-    if (!confirm(`Delete ${n} application${n === 1 ? "" : "s"}? This also removes their interview stages and contacts.`)) return;
+    const ids = visibleSelected.map((a) => a.id);
+    const n = ids.length;
+    const ok = await confirm({
+      title: `Delete ${n} application${n === 1 ? "" : "s"}?`,
+      message: "Their interview stages are deleted too, and linked contacts are unlinked. This can't be undone.",
+      confirmLabel: "Delete",
+      tone: "danger",
+    });
+    if (!ok) return;
     setDeleting(true);
     try {
-      await deleteApplications([...selectedIds]);
+      await deleteApplications(ids);
       setSelectedIds(new Set());
+      toast(`Deleted ${n} application${n === 1 ? "" : "s"}`);
     } catch (e) {
-      alert(`Couldn't delete: ${(e as Error).message}`);
+      toast(`Couldn't delete: ${errorMessage(e)}`, { tone: "error" });
     } finally {
       setDeleting(false);
     }
   };
 
+  const moveSelected = async (status: AppStatus) => {
+    const targets = visibleSelected.filter((a) => a.status !== status);
+    if (targets.length === 0) return;
+    try {
+      await Promise.all(targets.map((a) => updateApplication(a.id, { status })));
+      toast(`Moved ${targets.length} to ${STATUS[status].label}`);
+    } catch (e) {
+      toast(`Couldn't update every application: ${errorMessage(e)}`, { tone: "error" });
+    }
+  };
+
   // Exports the selection if there is one, otherwise whatever the current filters show.
   const handleExport = () => {
-    const rows = selectedIds.size > 0 ? filtered.filter((a) => selectedIds.has(a.id)) : filtered;
+    const rows = visibleSelected.length > 0 ? visibleSelected : filtered;
     downloadCsv(applicationsToCsv(rows), exportFilename());
+    toast(`Exported ${rows.length} application${rows.length === 1 ? "" : "s"}`);
   };
 
   const handleImport = async (file: File) => {
@@ -91,395 +153,293 @@ export default function ApplicationsTable({ onNavigate }: ApplicationsTableProps
       skipped > 0 && `${skipped} row${skipped === 1 ? "" : "s"} skipped (missing company or position)`,
       duplicates > 0 && `${duplicates} already tracked, skipped`,
       ignoredColumns.length > 0 && `Columns not imported: ${ignoredColumns.join(", ")}`,
-    ].filter(Boolean).join("\n");
+    ].filter(Boolean) as string[];
+    const detailList = details.length > 0 && (
+      <ul className="mt-3 list-disc space-y-1 pl-4 text-fg-muted">
+        {details.map((d) => (
+          <li key={d}>{d}</li>
+        ))}
+      </ul>
+    );
 
     if (fresh.length === 0) {
-      alert(`No new applications found in ${file.name}.${details ? "\n\n" + details : ""}\n\nThe file needs a header row with at least Company and Position columns.`);
+      await confirm({
+        title: "Nothing new to import",
+        message: (
+          <>
+            No new applications were found in <span className="font-medium text-fg">{file.name}</span>. The file needs a header row with at least Company and Position columns.
+            {detailList}
+          </>
+        ),
+        confirmLabel: "OK",
+        acknowledge: true,
+      });
       return;
     }
-    if (!confirm(`Import ${fresh.length} application${fresh.length === 1 ? "" : "s"} from ${file.name}?${details ? "\n\n" + details : ""}`)) return;
+    const ok = await confirm({
+      title: `Import ${fresh.length} application${fresh.length === 1 ? "" : "s"}?`,
+      message: (
+        <>
+          From <span className="font-medium text-fg">{file.name}</span>.{detailList}
+        </>
+      ),
+      confirmLabel: "Import",
+    });
+    if (!ok) return;
 
     setImporting(true);
     try {
       await importApplications(fresh);
+      toast(`Imported ${fresh.length} application${fresh.length === 1 ? "" : "s"}`);
     } catch (e) {
-      alert(`Couldn't import: ${(e as Error).message}`);
+      toast(`Couldn't import: ${errorMessage(e)}`, { tone: "error" });
     } finally {
       setImporting(false);
     }
   };
 
-  const allSelected = filtered.length > 0 && filtered.every((r) => selectedIds.has(r.id));
-  const toggleAll = () => {
-    if (allSelected) setSelectedIds(new Set());
-    else setSelectedIds(new Set(filtered.map((r) => r.id)));
-  };
-  const toggleRow = (id: string) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  };
+  const setStatus = (app: Application, status: AppStatus) =>
+    updateApplication(app.id, { status }).catch((e) => toast(`Couldn't update ${app.company}: ${errorMessage(e)}`, { tone: "error" }));
 
-  const SortIcon = ({ field }: { field: SortField }) => (
-    <svg
-      width="10" height="10" viewBox="0 0 10 10" fill="none"
-      style={{
-        marginLeft: "4px", flexShrink: 0,
-        opacity: sortField === field ? 1 : 0.3,
-        transform: sortField === field && sortDir === "desc" ? "rotate(180deg)" : "none",
-        transition: "transform 0.15s",
-      }}
-    >
-      <path d="M5 2v6M2 5l3-3 3 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-
-  const thStyle = (field: SortField): React.CSSProperties => ({
-    fontFamily: "var(--font-body)",
-    fontWeight: 600,
-    fontSize: "0.75rem",
-    color: sortField === field ? "var(--primary)" : "var(--muted-foreground)",
-    padding: "10px 14px",
-    textAlign: "left",
-    letterSpacing: "0.02em",
-    textTransform: "uppercase",
-    cursor: "pointer",
-    userSelect: "none",
-    whiteSpace: "nowrap",
-    background: "transparent",
-    border: "none",
-    width: "100%",
-    display: "flex",
-    alignItems: "center",
-  });
+  const hasFilters = filterStatus !== "all" || search.trim() !== "";
 
   return (
-    <div className="max-w-[1400px] mx-auto px-6 py-8">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-5">
-        <div>
-          <h1 style={{ fontFamily: "var(--font-heading)", fontSize: "1.5rem", fontWeight: 700, color: "var(--foreground)", letterSpacing: "-0.02em" }}>
-            Applications
-          </h1>
-          <p style={{ fontFamily: "var(--font-body)", fontSize: "0.8125rem", color: "var(--muted-foreground)", marginTop: "2px" }}>
-            {filtered.length} of {applications.length} applications
-            {selectedIds.size > 0 && <span style={{ color: "var(--primary)", marginLeft: "6px" }}>· {selectedIds.size} selected</span>}
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          {selectedIds.size > 0 && (
-            <button
-              onClick={handleDelete}
-              disabled={deleting}
-              style={{ opacity: deleting ? 0.6 : 1, background: "#FEE2E2", color: "#DC2626", border: "1px solid #FCA5A544", borderRadius: "7px", padding: "7px 12px", fontFamily: "var(--font-body)", fontSize: "0.8rem", fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", gap: "5px" }}
-            >
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                <path d="M2 3h8M5 3V2h2v1M4 3v7h4V3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-              {deleting ? "Deleting…" : `Delete ${selectedIds.size}`}
-            </button>
-          )}
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".csv,text/csv"
-            style={{ display: "none" }}
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              e.target.value = ""; // so picking the same file again still fires onChange
-              if (file) handleImport(file);
-            }}
-          />
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            disabled={importing}
-            style={{ opacity: importing ? 0.6 : 1, background: "var(--muted)", border: "1px solid var(--border)", borderRadius: "7px", padding: "7px 12px", fontFamily: "var(--font-body)", fontSize: "0.8rem", color: "var(--muted-foreground)", cursor: "pointer", display: "flex", alignItems: "center", gap: "5px" }}
-          >
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-              <path d="M6 8V2M3.5 5.5L6 8l2.5-2.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
-              <path d="M2 10h8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-            </svg>
-            {importing ? "Importing…" : "Import CSV"}
-          </button>
-          <button
-            onClick={handleExport}
-            disabled={filtered.length === 0}
-            style={{ opacity: filtered.length === 0 ? 0.6 : 1, background: "var(--muted)", border: "1px solid var(--border)", borderRadius: "7px", padding: "7px 12px", fontFamily: "var(--font-body)", fontSize: "0.8rem", color: "var(--muted-foreground)", cursor: "pointer", display: "flex", alignItems: "center", gap: "5px" }}
-          >
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-              <path d="M6 2v6M3.5 4.5L6 2l2.5 2.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
-              <path d="M2 10h8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-            </svg>
-            {selectedIds.size > 0 ? `Export ${selectedIds.size}` : "Export CSV"}
-          </button>
-          <button
-            onClick={() => onNavigate("add")}
-            style={{ background: "var(--primary)", color: "white", border: "none", borderRadius: "8px", padding: "8px 14px", fontFamily: "var(--font-body)", fontWeight: 600, fontSize: "0.8125rem", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}
-            onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = "0.88")}
-            onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = "1")}
-          >
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-              <path d="M6 1v10M1 6h10" stroke="white" strokeWidth="2" strokeLinecap="round" />
-            </svg>
-            Add Application
-          </button>
-        </div>
-      </div>
-
-      {/* Filter bar */}
-      <div
-        style={{
-          background: "var(--card)", border: "1px solid var(--border)", borderRadius: "10px",
-          padding: "10px 14px", marginBottom: "12px",
-          display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap",
+    <Page>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".csv,text/csv"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          e.target.value = ""; // so picking the same file again still fires onChange
+          if (file) handleImport(file);
         }}
-      >
-        {/* Search */}
-        <div style={{ position: "relative", flex: "1 1 220px" }}>
-          <svg width="13" height="13" viewBox="0 0 13 13" fill="none" style={{ position: "absolute", left: "10px", top: "50%", transform: "translateY(-50%)", color: "var(--muted-foreground)", pointerEvents: "none" }}>
-            <circle cx="5.5" cy="5.5" r="4" stroke="currentColor" strokeWidth="1.4" />
-            <path d="M9 9l2.5 2.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-          </svg>
-          <input
-            type="text"
-            placeholder="Search company, position, location…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            style={{
-              width: "100%", paddingLeft: "30px", paddingRight: "10px", paddingTop: "7px", paddingBottom: "7px",
-              fontFamily: "var(--font-body)", fontSize: "0.8125rem", color: "var(--foreground)",
-              background: "var(--muted)", border: "1px solid var(--border)", borderRadius: "7px",
-              outline: "none", boxSizing: "border-box",
-            }}
+      />
+      <PageHeader
+        title="Applications"
+        description={applications.length === 0 ? "Every role you're tracking, in one sortable list." : `${applications.length} tracked · ${counts.applied + counts.interviewing} in progress`}
+        actions={
+          <>
+            <Button icon={IconUpload} onClick={() => fileInputRef.current?.click()} loading={importing}>
+              Import
+            </Button>
+            <Button icon={IconDownload} onClick={handleExport} disabled={filtered.length === 0}>
+              Export
+            </Button>
+            <Button variant="primary" icon={IconPlus} onClick={() => onNavigate("add")}>
+              Add application
+            </Button>
+          </>
+        }
+      />
+
+      {applications.length === 0 ? (
+        <Card>
+          <EmptyState
+            icon={IconList}
+            title="No applications yet"
+            description="Add the roles you're interested in, or import a CSV from a spreadsheet you've been keeping."
+            actions={
+              <>
+                <Button icon={IconUpload} onClick={() => fileInputRef.current?.click()}>
+                  Import CSV
+                </Button>
+                <Button variant="primary" icon={IconPlus} onClick={() => onNavigate("add")}>
+                  Add application
+                </Button>
+              </>
+            }
           />
-        </div>
-
-        <div style={{ width: "1px", height: "24px", background: "var(--border)" }} />
-
-        {/* Status filter pills */}
-        <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
-          <span style={{ fontFamily: "var(--font-body)", fontSize: "0.75rem", color: "var(--muted-foreground)", marginRight: "2px" }}>Status:</span>
-          {[{ id: "all" as const, label: "All" }, ...Object.entries(STATUS_META).map(([id, m]) => ({ id: id as AppStatus, label: m.label }))].map((opt) => {
-            const isActive = filterStatus === opt.id;
-            const meta = opt.id !== "all" ? STATUS_META[opt.id] : null;
-            return (
-              <button
-                key={opt.id}
-                onClick={() => setFilterStatus(opt.id)}
-                style={{
-                  fontFamily: "var(--font-body)", fontSize: "0.75rem", fontWeight: isActive ? 600 : 400,
-                  padding: "3px 9px", borderRadius: "100px",
-                  border: isActive ? `1px solid ${meta?.color ?? "var(--primary)"}55` : "1px solid transparent",
-                  background: isActive ? (meta?.bg ?? "var(--accent)") : "transparent",
-                  color: isActive ? (meta?.color ?? "var(--primary)") : "var(--muted-foreground)",
-                  cursor: "pointer", transition: "all 0.12s",
-                }}
-              >
-                {opt.label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Table */}
-      <div
-        style={{
-          background: "var(--card)", border: "1px solid var(--border)", borderRadius: "12px",
-          overflow: "hidden",
-        }}
-      >
-        <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
-          <colgroup>
-            <col style={{ width: "40px" }} />
-            <col style={{ width: "180px" }} />
-            <col style={{ width: "220px" }} />
-            <col style={{ width: "130px" }} />
-            <col style={{ width: "110px" }} />
-            <col style={{ width: "110px" }} />
-            <col style={{ width: "160px" }} />
-            <col style={{ width: "90px" }} />
-            <col style={{ width: "44px" }} />
-          </colgroup>
-          <thead>
-            <tr style={{ borderBottom: "1px solid var(--border)", background: "var(--muted)" }}>
-              {/* Checkbox */}
-              <th style={{ padding: "10px 0 10px 14px" }}>
-                <input
-                  type="checkbox"
-                  checked={allSelected}
-                  onChange={toggleAll}
-                  style={{ accentColor: "var(--primary)", width: "14px", height: "14px", cursor: "pointer" }}
-                />
-              </th>
-              {(
-                [
-                  { label: "Company", field: "company" as SortField },
-                  { label: "Position", field: "position" as SortField },
-                  { label: "Status", field: "status" as SortField },
-                  { label: "Applied", field: "appliedDate" as SortField },
-                  { label: "Deadline", field: "deadline" as SortField },
-                  { label: "Location", field: "location" as SortField },
-                  { label: "Salary", field: "salary" as SortField },
-                ] as { label: string; field: SortField }[]
-              ).map((col) => (
-                <th key={col.field} style={{ padding: 0 }}>
-                  <button style={thStyle(col.field)} onClick={() => handleSort(col.field)}>
-                    {col.label}
-                    <SortIcon field={col.field} />
-                  </button>
-                </th>
-              ))}
-              <th style={{ padding: "10px 14px", width: "44px" }} />
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.length === 0 ? (
-              <tr>
-                <td colSpan={9} style={{ padding: "48px", textAlign: "center" }}>
-                  <p style={{ fontFamily: "var(--font-body)", fontSize: "0.875rem", color: "var(--muted-foreground)" }}>
-                    No applications match your filters.
-                  </p>
-                </td>
-              </tr>
-            ) : (
-              filtered.map((app, i) => {
-                const meta = STATUS_META[app.status];
-                const isSelected = selectedIds.has(app.id);
+        </Card>
+      ) : (
+        <>
+          {/* Toolbar */}
+          <div className="mb-3 flex flex-col gap-3 md:flex-row md:items-center">
+            <div className="relative md:w-72">
+              <Input icon={IconSearch} type="search" aria-label="Search applications" placeholder="Search company, role, location, notes" value={search} onChange={(e) => setSearch(e.target.value)} className="pr-8 [&::-webkit-search-cancel-button]:hidden" />
+              {search && (
+                <button type="button" aria-label="Clear search" onClick={() => setSearch("")} className="absolute top-1/2 right-2 -translate-y-1/2 rounded p-0.5 text-fg-faint hover:text-fg">
+                  <IconX size={14} />
+                </button>
+              )}
+            </div>
+            <div className="-mx-1 flex gap-1 overflow-x-auto px-1 pb-0.5" role="group" aria-label="Filter by status">
+              {(["all", ...STATUS_ORDER] as const).map((s) => {
+                const active = filterStatus === s;
                 return (
-                  <tr
-                    key={app.id}
-                    style={{
-                      borderBottom: i < filtered.length - 1 ? "1px solid var(--border)" : "none",
-                      background: isSelected ? "var(--accent)" : "transparent",
-                      transition: "background 0.1s",
-                    }}
-                    onMouseEnter={(e) => { if (!isSelected) (e.currentTarget as HTMLTableRowElement).style.background = "var(--muted)"; }}
-                    onMouseLeave={(e) => { if (!isSelected) (e.currentTarget as HTMLTableRowElement).style.background = "transparent"; }}
+                  <button
+                    key={s}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => setFilterStatus(s)}
+                    className={cx(
+                      "inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full border px-2.5 text-ui transition-colors",
+                      active ? "border-fg bg-fg text-on-ink" : "border-line bg-surface text-fg-2 hover:border-line-strong",
+                    )}
                   >
-                    {/* Checkbox */}
-                    <td style={{ padding: "11px 0 11px 14px" }} onClick={(e) => e.stopPropagation()}>
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={() => toggleRow(app.id)}
-                        style={{ accentColor: "var(--primary)", width: "14px", height: "14px", cursor: "pointer" }}
-                      />
-                    </td>
-
-                    {/* Company */}
-                    <td style={{ padding: "11px 14px", cursor: "pointer" }} onClick={() => onNavigate("detail", app.id)}>
-                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                        <div
-                          style={{
-                            width: "26px", height: "26px", borderRadius: "6px", flexShrink: 0,
-                            background: app.logoColor + "22", border: `1.5px solid ${app.logoColor}44`,
-                            display: "flex", alignItems: "center", justifyContent: "center",
-                            fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: "0.6rem", color: app.logoColor,
-                          }}
-                        >
-                          {app.logoInitials}
-                        </div>
-                        <span style={{ fontFamily: "var(--font-body)", fontWeight: 600, fontSize: "0.8375rem", color: "var(--foreground)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                          {app.company}
-                        </span>
-                      </div>
-                    </td>
-
-                    {/* Position */}
-                    <td style={{ padding: "11px 14px", cursor: "pointer" }} onClick={() => onNavigate("detail", app.id)}>
-                      <span style={{ fontFamily: "var(--font-body)", fontSize: "0.8375rem", color: "var(--foreground)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "block" }}>
-                        {app.position}
-                      </span>
-                    </td>
-
-                    {/* Status */}
-                    <td style={{ padding: "11px 14px" }}>
-                      <span
-                        style={{
-                          fontFamily: "var(--font-body)", fontSize: "0.75rem", fontWeight: 600,
-                          padding: "3px 9px", borderRadius: "100px",
-                          background: meta.bg, color: meta.color, whiteSpace: "nowrap",
-                        }}
-                      >
-                        {meta.label}
-                      </span>
-                    </td>
-
-                    {/* Applied */}
-                    <td style={{ padding: "11px 14px" }}>
-                      <span style={{ fontFamily: "var(--font-mono-base)", fontSize: "0.8rem", color: "var(--muted-foreground)" }}>
-                        {app.appliedDate ? toDate(app.appliedDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" }) : "—"}
-                      </span>
-                    </td>
-
-                    {/* Deadline */}
-                    <td style={{ padding: "11px 14px" }}>
-                      <span style={{ fontFamily: "var(--font-mono-base)", fontSize: "0.8rem", color: "var(--muted-foreground)" }}>
-                        {app.deadline ? toDate(app.deadline).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" }) : "—"}
-                      </span>
-                    </td>
-
-                    {/* Location */}
-                    <td style={{ padding: "11px 14px" }}>
-                      <span style={{ fontFamily: "var(--font-body)", fontSize: "0.8rem", color: "var(--muted-foreground)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "block" }}>
-                        {app.location || "—"}
-                      </span>
-                    </td>
-
-                    {/* Salary */}
-                    <td style={{ padding: "11px 14px" }}>
-                      <span style={{ fontFamily: "var(--font-mono-base)", fontSize: "0.8rem", color: app.salary ? "var(--foreground)" : "var(--muted-foreground)", fontWeight: app.salary ? 500 : 400 }}>
-                        {app.salary || "—"}
-                      </span>
-                    </td>
-
-                    {/* Actions */}
-                    <td style={{ padding: "11px 14px", textAlign: "right" }}>
-                      <button
-                        onClick={() => onNavigate("detail", app.id)}
-                        style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted-foreground)", padding: "4px", borderRadius: "5px", display: "inline-flex", alignItems: "center" }}
-                        onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = "var(--primary)"; (e.currentTarget as HTMLButtonElement).style.background = "var(--accent)"; }}
-                        onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = "var(--muted-foreground)"; (e.currentTarget as HTMLButtonElement).style.background = "none"; }}
-                      >
-                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                          <path d="M5 3l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
-                      </button>
-                    </td>
-                  </tr>
+                    {s !== "all" && <StatusDot status={s} className={active ? "ring-2 ring-on-ink/30" : undefined} />}
+                    {s === "all" ? "All" : STATUS[s].label}
+                    <span className={cx("text-xs tabular-nums", active ? "text-on-ink/70" : "text-fg-muted")}>{s === "all" ? applications.length : counts[s]}</span>
+                  </button>
                 );
-              })
-            )}
-          </tbody>
-        </table>
-
-        {/* Footer */}
-        <div
-          style={{
-            borderTop: "1px solid var(--border)", padding: "10px 16px",
-            display: "flex", alignItems: "center", justifyContent: "space-between",
-            background: "var(--muted)",
-          }}
-        >
-          <span style={{ fontFamily: "var(--font-body)", fontSize: "0.75rem", color: "var(--muted-foreground)" }}>
-            Showing {filtered.length} of {applications.length} applications
-          </span>
-          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            {Object.entries(STATUS_META).map(([id, meta]) => {
-              const n = applications.filter((a) => a.status === id).length;
-              return (
-                <div key={id} style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                  <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: meta.color, display: "inline-block" }} />
-                  <span style={{ fontFamily: "var(--font-body)", fontSize: "0.6875rem", color: "var(--muted-foreground)" }}>{meta.label} {n}</span>
-                </div>
-              );
-            })}
+              })}
+            </div>
           </div>
-        </div>
-      </div>
-    </div>
+
+          <Card className="overflow-hidden">
+            {visibleSelected.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2 border-b border-line bg-accent-soft/60 px-3 py-2" role="region" aria-label="Bulk actions">
+                <span className="mr-1 text-ui font-medium text-fg">{visibleSelected.length} selected</span>
+                <Select aria-label="Move selected to" value="" onChange={(e) => e.target.value && moveSelected(e.target.value as AppStatus)} className="h-7 bg-surface text-ui" wrapperClassName="w-40">
+                  <option value="">Move to…</option>
+                  {STATUS_ORDER.map((s) => (
+                    <option key={s} value={s}>
+                      {STATUS[s].label}
+                    </option>
+                  ))}
+                </Select>
+                <Button size="sm" icon={IconDownload} onClick={handleExport}>
+                  Export
+                </Button>
+                <Button size="sm" variant="danger-ghost" icon={IconTrash} onClick={handleDelete} loading={deleting}>
+                  Delete
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())} className="ml-auto">
+                  Clear selection
+                </Button>
+              </div>
+            )}
+
+            <div className="relative overflow-x-auto">
+              <table className="w-full min-w-[980px] table-fixed border-collapse text-left">
+                <colgroup>
+                  <col className="w-11" />
+                  {COLUMNS.map((c) => (
+                    <col key={c.field} className={c.className} />
+                  ))}
+                  <col className="w-10" />
+                </colgroup>
+                <thead>
+                  <tr className="border-b border-line bg-subtle">
+                    <th scope="col" className="py-2 pl-4">
+                      <Checkbox checked={allSelected} indeterminate={!allSelected && visibleSelected.length > 0} onChange={toggleAll} aria-label="Select all visible applications" />
+                    </th>
+                    {COLUMNS.map((col) => {
+                      const active = sortField === col.field;
+                      return (
+                        <th key={col.field} scope="col" aria-sort={active ? (sortDir === "asc" ? "ascending" : "descending") : undefined} className="px-3 py-0">
+                          <button
+                            type="button"
+                            onClick={() => handleSort(col.field)}
+                            className={cx("group -mx-1.5 inline-flex h-9 items-center gap-1 rounded px-1.5 text-xs font-medium transition-colors", active ? "text-fg" : "text-fg-muted hover:text-fg")}
+                          >
+                            {col.label}
+                            <IconArrowUp size={12} strokeWidth={2.25} className={cx("transition-[transform,opacity]", active ? "opacity-100" : "opacity-0 group-hover:opacity-40", active && sortDir === "desc" && "rotate-180")} />
+                          </button>
+                        </th>
+                      );
+                    })}
+                    <th scope="col" className="sr-only">
+                      Open
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.length === 0 ? (
+                    <tr>
+                      <td colSpan={COLUMNS.length + 2}>
+                        <EmptyState
+                          compact
+                          icon={IconSearch}
+                          title="No applications match"
+                          description={search ? `Nothing matches “${search}”${filterStatus !== "all" ? ` in ${STATUS[filterStatus].label}` : ""}.` : `You don't have any ${filterStatus !== "all" ? STATUS[filterStatus].label.toLowerCase() : ""} applications.`}
+                          actions={
+                            hasFilters && (
+                              <Button
+                                size="sm"
+                                onClick={() => {
+                                  setSearch("");
+                                  setFilterStatus("all");
+                                }}
+                              >
+                                Clear filters
+                              </Button>
+                            )
+                          }
+                        />
+                      </td>
+                    </tr>
+                  ) : (
+                    filtered.map((app) => {
+                      const selected = selectedIds.has(app.id);
+                      return (
+                        <tr
+                          key={app.id}
+                          onClick={() => onNavigate("detail", app.id)}
+                          className={cx("group h-12 cursor-pointer border-b border-line transition-colors last:border-b-0", selected ? "bg-accent-soft/50" : "hover:bg-subtle")}
+                        >
+                          <td className="pl-4" onClick={(e) => e.stopPropagation()}>
+                            <Checkbox checked={selected} onChange={() => toggleRow(app.id)} aria-label={`Select ${app.company} ${app.position}`} />
+                          </td>
+                          <td className="px-3">
+                            <div className="flex min-w-0 items-center gap-2.5">
+                              <CompanyLogo name={app.company} initials={app.logoInitials} color={app.logoColor} size={24} />
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onNavigate("detail", app.id);
+                                }}
+                                className="truncate rounded text-ui font-medium text-fg hover:underline hover:underline-offset-2"
+                              >
+                                {app.company}
+                              </button>
+                            </div>
+                          </td>
+                          <td className="truncate px-3 text-ui text-fg-2" title={app.position}>
+                            {app.position}
+                          </td>
+                          <td className="px-3">
+                            <StatusSelect value={app.status} onChange={(s) => setStatus(app, s)} label={`Status for ${app.company}`} />
+                          </td>
+                          <td className="px-3 text-ui text-fg-muted tabular-nums">{app.appliedDate ? formatDate(app.appliedDate) : <span className="text-fg-faint">—</span>}</td>
+                          <td className="px-3">
+                            {app.deadline ? (
+                              app.status === "wishlist" || app.status === "applied" ? (
+                                <DueChip date={app.deadline} className="text-ui" />
+                              ) : (
+                                <span className="text-ui text-fg-muted tabular-nums">{formatDate(app.deadline)}</span>
+                              )
+                            ) : (
+                              <span className="text-ui text-fg-faint">—</span>
+                            )}
+                          </td>
+                          <td className="truncate px-3 text-ui text-fg-muted" title={app.location}>
+                            {app.location || <span className="text-fg-faint">—</span>}
+                          </td>
+                          <td className="truncate px-3 text-ui text-fg-2 tabular-nums">{app.salary || <span className="text-fg-faint">—</span>}</td>
+                          <td className="pr-3 text-right">
+                            <IconChevronRight size={16} className="inline text-fg-faint transition-colors group-hover:text-fg-muted" />
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+            {filtered.length > 0 && (
+              <div className="flex items-center justify-between border-t border-line bg-subtle px-4 py-2 text-xs text-fg-muted">
+                <span>
+                  {hasFilters ? `${filtered.length} of ${applications.length}` : `${applications.length}`} application{applications.length === 1 ? "" : "s"}
+                </span>
+                <span className="hidden sm:inline">Click a status to change it · Click a row to open</span>
+              </div>
+            )}
+          </Card>
+        </>
+      )}
+    </Page>
   );
 }
