@@ -275,12 +275,12 @@ export default function ApplicationsTable({ onNavigate, initialStatus }: Applica
                     onClick={() => setFilterStatus(s)}
                     className={cx(
                       "inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full border px-2.5 text-ui transition-colors",
-                      active ? "border-fg bg-fg text-white" : "border-line bg-surface text-fg-2 hover:border-line-strong",
+                      active ? "border-fg bg-fg text-on-ink" : "border-line bg-surface text-fg-2 hover:border-line-strong",
                     )}
                   >
-                    {s !== "all" && <StatusDot status={s} className={active ? "ring-2 ring-white/30" : undefined} />}
+                    {s !== "all" && <StatusDot status={s} className={active ? "ring-2 ring-on-ink/30" : undefined} />}
                     {s === "all" ? "All" : STATUS[s].label}
-                    <span className={cx("text-xs tabular-nums", active ? "text-white/70" : "text-fg-muted")}>{s === "all" ? applications.length : counts[s]}</span>
+                    <span className={cx("text-xs tabular-nums", active ? "text-on-ink/70" : "text-fg-muted")}>{s === "all" ? applications.length : counts[s]}</span>
                   </button>
                 );
               })}

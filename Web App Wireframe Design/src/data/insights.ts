@@ -63,7 +63,20 @@ export function weeklySubmissions(applications: Application[], weeks = 12) {
 
 // ---------- Needs attention ----------
 
-export type AttentionKind = "task-overdue" | "deadline-passed" | "deadline-soon" | "interview-soon" | "stage-unlogged" | "follow-up";
+export type AttentionKind = "task-overdue" | "task-today" | "deadline-passed" | "deadline-soon" | "interview-soon" | "stage-unlogged" | "follow-up";
+
+/** The four kinds of work the dashboard lets you filter by. */
+export type AttentionGroup = "tasks" | "deadlines" | "interviews" | "follow-ups";
+
+export const ATTENTION_GROUP: Record<AttentionKind, AttentionGroup> = {
+  "task-overdue": "tasks",
+  "task-today": "tasks",
+  "deadline-passed": "deadlines",
+  "deadline-soon": "deadlines",
+  "interview-soon": "interviews",
+  "stage-unlogged": "interviews",
+  "follow-up": "follow-ups",
+};
 
 export interface AttentionItem {
   key: string;
@@ -71,25 +84,34 @@ export interface AttentionItem {
   severity: "danger" | "warning" | "info";
   title: string;
   detail: string;
+  /** Short, scannable timing: "Tomorrow", "2 days late". */
+  when: string;
   /** Sort key: lower is more urgent. */
   rank: number;
   appId?: string;
   taskId?: string;
+  stageId?: string;
 }
 
+/**
+ * Ordered by what can still be acted on soonest: an interview or deadline in the next two days outranks
+ * an overdue task, which outranks things that have already slipped (a passed deadline, a quiet application).
+ */
 export function attentionItems(applications: Application[], tasks: Task[]): AttentionItem[] {
   const today = todayISO();
   const out: AttentionItem[] = [];
 
   for (const task of tasks) {
-    if (task.done || !task.due || task.due >= today) continue;
+    if (task.done || !task.due || task.due > today) continue;
+    const days = daysUntil(task.due);
     out.push({
       key: `task-${task.id}`,
-      kind: "task-overdue",
-      severity: "danger",
+      kind: days < 0 ? "task-overdue" : "task-today",
+      severity: days < 0 ? "danger" : "warning",
       title: task.text,
-      detail: [task.company, `Due ${relativeDay(task.due).toLowerCase()}`].filter(Boolean).join(" · "),
-      rank: daysUntil(task.due),
+      detail: task.company,
+      when: days < 0 ? `Due ${relativeDay(task.due).toLowerCase()}` : "Due today",
+      rank: days < 0 ? 30 + days / 100 : 35,
       appId: task.applicationId ?? undefined,
       taskId: task.id,
     });
@@ -102,10 +124,11 @@ export function attentionItems(applications: Application[], tasks: Task[]): Atte
         out.push({
           key: `deadline-${app.id}`,
           kind: "deadline-passed",
-          severity: "danger",
+          severity: "info",
           title: `${app.company} deadline passed`,
-          detail: `${app.position} · Still on your wishlist. Apply anyway or close it out.`,
-          rank: 100 + days,
+          detail: `${app.position} · Still on your wishlist`,
+          when: `Due ${relativeDay(app.deadline).toLowerCase()}`,
+          rank: 60 - days / 100,
           appId: app.id,
         });
       } else if (days >= 0 && days <= 7) {
@@ -114,8 +137,9 @@ export function attentionItems(applications: Application[], tasks: Task[]): Atte
           kind: "deadline-soon",
           severity: days <= 2 ? "danger" : "warning",
           title: `Apply to ${app.company}`,
-          detail: `${app.position} · Deadline ${days === 0 ? "today" : days === 1 ? "tomorrow" : `in ${days} days`}`,
-          rank: 200 + days,
+          detail: app.position,
+          when: days === 0 ? "Due today" : days === 1 ? "Due tomorrow" : `Due in ${days} days`,
+          rank: (days <= 2 ? 20 : 50) + days,
           appId: app.id,
         });
       }
@@ -129,11 +153,13 @@ export function attentionItems(applications: Application[], tasks: Task[]): Atte
           out.push({
             key: `stage-${stage.id}`,
             kind: "interview-soon",
-            severity: "info",
-            title: `${stage.name} with ${app.company}`,
-            detail: `${relativeDay(stage.date)} · ${app.position}`,
-            rank: 150 + days,
+            severity: "warning",
+            title: `Prepare for ${app.company} ${stage.name.toLowerCase()}`,
+            detail: app.position,
+            when: relativeDay(stage.date),
+            rank: 10 + days,
             appId: app.id,
+            stageId: stage.id,
           });
         } else if (days < 0) {
           out.push({
@@ -141,9 +167,11 @@ export function attentionItems(applications: Application[], tasks: Task[]): Atte
             kind: "stage-unlogged",
             severity: "warning",
             title: `How did the ${app.company} ${stage.name.toLowerCase()} go?`,
-            detail: `Was ${formatDate(stage.date)} · Mark it complete or update the status`,
-            rank: 300 + days,
+            detail: app.position,
+            when: `Was ${formatDate(stage.date)}`,
+            rank: 40 - days / 100,
             appId: app.id,
+            stageId: stage.id,
           });
         }
       }
@@ -157,8 +185,9 @@ export function attentionItems(applications: Application[], tasks: Task[]): Atte
           kind: "follow-up",
           severity: "info",
           title: `Follow up with ${app.company}`,
-          detail: `${app.position} · Applied ${waited} days ago, no response logged`,
-          rank: 400 - waited,
+          detail: `${app.position} · No response logged`,
+          when: `Applied ${waited} days ago`,
+          rank: 70 - waited / 1000,
           appId: app.id,
         });
       }
@@ -214,12 +243,17 @@ export function calendarItems(applications: Application[], tasks: Task[], events
   return out.sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
 }
 
-/** Upcoming items in the next `days` days. Deadlines for offers are dropped: that race is already won. */
+/**
+ * Upcoming items in the next `days` days. Deadlines for offers are dropped: that race is already won.
+ * Rounds for closed applications are dropped too: a rejection cancels them, matching the dashboard's "next round".
+ */
 export function upcomingItems(applications: Application[], tasks: Task[], events: CalendarEvent[], days = 14) {
   const today = todayISO();
   const until = addDaysISO(days);
   const offerIds = new Set(applications.filter((a) => a.status === "offer").map((a) => a.id));
-  const completedStages = new Set(applications.flatMap((a) => a.interviewStages.filter((s) => s.completed).map((s) => `stage-${s.id}`)));
+  const completedStages = new Set(
+    applications.flatMap((a) => a.interviewStages.filter((s) => s.completed || a.status === "rejected").map((s) => `stage-${s.id}`)),
+  );
   return calendarItems(applications, tasks, events).filter(
     (item) =>
       item.date >= today &&

@@ -99,7 +99,7 @@ function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: () => void }
       role={toast.tone === "error" ? "alert" : "status"}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      className="pointer-events-auto flex w-full max-w-sm items-start gap-2.5 rounded-lg bg-ink py-2.5 pr-2 pl-3 text-ui text-white shadow-dialog animate-toast-in"
+      className="pointer-events-auto flex w-full max-w-sm items-start gap-2.5 rounded-lg bg-inverse py-2.5 pr-2 pl-3 text-ui text-white shadow-dialog animate-toast-in"
     >
       <Icon size={16} className={cx("mt-0.5", toast.tone === "error" ? "text-[#FF8A8A]" : toast.tone === "info" ? "text-white/70" : "text-[#5FD3A6]")} />
       <div className="min-w-0 flex-1 py-px leading-snug">{toast.message}</div>

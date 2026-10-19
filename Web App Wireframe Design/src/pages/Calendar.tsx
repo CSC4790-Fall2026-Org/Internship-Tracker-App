@@ -186,7 +186,7 @@ export default function Calendar({ onNavigate, focusEventId, onFocusHandled }: C
                           aria-pressed={isSelected}
                           className={cx(
                             "flex size-6 items-center justify-center rounded-full text-xs tabular-nums transition-colors",
-                            isToday ? "bg-accent font-semibold text-white" : isSelected ? "bg-fg font-medium text-white" : cell.inMonth ? "text-fg-2" : "text-fg-muted",
+                            isToday ? "bg-accent font-semibold text-white" : isSelected ? "bg-fg font-medium text-on-ink" : cell.inMonth ? "text-fg-2" : "text-fg-muted",
                           )}
                         >
                           {cell.day}

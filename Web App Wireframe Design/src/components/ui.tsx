@@ -17,7 +17,7 @@ const BUTTON_BASE =
   "inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md font-medium select-none transition-[background-color,border-color,color,box-shadow,opacity] duration-150 disabled:pointer-events-none disabled:opacity-50";
 
 const BUTTON_VARIANT: Record<ButtonVariant, string> = {
-  primary: "bg-ink text-white shadow-xs hover:bg-ink-hover active:bg-black",
+  primary: "bg-ink text-on-ink shadow-xs hover:bg-ink-hover",
   secondary: "border border-line bg-surface text-fg shadow-xs hover:border-line-strong hover:bg-subtle active:bg-muted",
   ghost: "text-fg-2 hover:bg-muted hover:text-fg active:bg-muted-strong",
   danger: "bg-danger text-white shadow-xs hover:bg-danger-hover",
@@ -173,8 +173,8 @@ export function Checkbox({ indeterminate, className, ...rest }: Omit<ComponentPr
         className="peer size-4 appearance-none rounded-[4px] border border-line-strong bg-surface shadow-xs transition-colors checked:border-ink checked:bg-ink indeterminate:border-ink indeterminate:bg-ink hover:border-fg-faint focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:opacity-50"
         {...rest}
       />
-      <IconCheck size={12} strokeWidth={3} className="pointer-events-none absolute inset-0 m-auto text-white opacity-0 peer-checked:opacity-100" />
-      <span className="pointer-events-none absolute inset-0 m-auto h-0.5 w-2 rounded bg-white opacity-0 peer-indeterminate:opacity-100" />
+      <IconCheck size={12} strokeWidth={3} className="pointer-events-none absolute inset-0 m-auto text-on-ink opacity-0 peer-checked:opacity-100" />
+      <span className="pointer-events-none absolute inset-0 m-auto h-0.5 w-2 rounded bg-on-ink opacity-0 peer-indeterminate:opacity-100" />
     </span>
   );
 }
@@ -280,7 +280,7 @@ export function StatusSelect({ value, onChange, disabled, size = "sm", label = "
         disabled={disabled}
         onChange={(e) => onChange(e.target.value as AppStatus)}
         className={cx(
-          "appearance-none rounded-full border border-transparent font-medium [field-sizing:content] transition-[box-shadow,border-color] hover:border-black/10 focus:outline-none focus-visible:ring-3 focus-visible:ring-accent/20 disabled:opacity-60",
+          "appearance-none rounded-full border border-transparent font-medium [field-sizing:content] transition-[box-shadow,border-color] hover:border-fg/10 focus:outline-none focus-visible:ring-3 focus-visible:ring-accent/20 disabled:opacity-60",
           size === "sm" ? "h-[22px] pr-6 pl-5 text-xs" : "h-8 pr-8 pl-6.5 text-ui",
           STATUS[value].badge,
         )}
@@ -328,8 +328,8 @@ export function CompanyLogo({ name, initials, color, size = 28, className }: { n
         height: size,
         borderRadius: Math.round(size * 0.26),
         fontSize: Math.max(9, Math.round(size * 0.36)),
-        background: `color-mix(in oklab, ${color} 13%, white)`,
-        color: `color-mix(in oklab, ${color} 72%, black)`,
+        background: `color-mix(in oklab, ${color} 13%, var(--color-surface))`,
+        color: `color-mix(in oklab, ${color} 72%, var(--color-fg))`,
         boxShadow: `inset 0 0 0 1px color-mix(in oklab, ${color} 22%, transparent)`,
       }}
     >
@@ -362,8 +362,8 @@ export function Avatar({ name, size = 28, className }: { name: string; size?: nu
         width: size,
         height: size,
         fontSize: Math.max(9, Math.round(size * 0.37)),
-        background: `color-mix(in oklab, ${hue} 14%, white)`,
-        color: `color-mix(in oklab, ${hue} 75%, black)`,
+        background: `color-mix(in oklab, ${hue} 14%, var(--color-surface))`,
+        color: `color-mix(in oklab, ${hue} 75%, var(--color-fg))`,
       }}
     >
       {initialsOf(name)}
@@ -413,7 +413,7 @@ export function Skeleton({ className }: { className?: string }) {
 
 export function Segmented<T extends string>({ value, onChange, options, label, size = "md" }: { value: T; onChange: (v: T) => void; options: { value: T; label: ReactNode; icon?: IconComponent; title?: string }[]; label: string; size?: "sm" | "md" }) {
   return (
-    <div role="group" aria-label={label} className="inline-flex rounded-lg bg-muted p-0.5">
+    <div role="group" aria-label={label} className="inline-flex shrink-0 rounded-lg bg-muted p-0.5">
       {options.map((opt) => {
         const active = opt.value === value;
         return (
@@ -424,7 +424,7 @@ export function Segmented<T extends string>({ value, onChange, options, label, s
             title={opt.title}
             onClick={() => onChange(opt.value)}
             className={cx(
-              "inline-flex items-center gap-1.5 rounded-md font-medium transition-[background-color,color,box-shadow] duration-150",
+              "inline-flex items-center gap-1.5 rounded-md font-medium whitespace-nowrap transition-[background-color,color,box-shadow] duration-150",
               size === "sm" ? "h-6 px-2 text-xs" : "h-7 px-2.5 text-ui",
               active ? "bg-surface text-fg shadow-[0_1px_2px_rgb(16_16_20/0.08),0_0_0_1px_rgb(16_16_20/0.04)]" : "text-fg-muted hover:text-fg",
             )}

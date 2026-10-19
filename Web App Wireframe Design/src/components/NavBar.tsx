@@ -4,6 +4,7 @@ import { useData } from "../data/DataContext";
 import { attentionItems } from "../data/insights";
 import { Avatar, cx, IconButton, Kbd } from "./ui";
 import { Menu, useDialogBehavior } from "./overlay";
+import { useTheme } from "../lib/theme";
 import {
   IconBoard,
   IconBriefcase,
@@ -13,10 +14,12 @@ import {
   IconList,
   IconLogOut,
   IconMenu,
+  IconMoon,
   IconPlus,
   IconProfile,
   IconSearch,
   IconSidebar,
+  IconSun,
   IconUsers,
   IconX,
   type IconComponent,
@@ -84,6 +87,7 @@ function readCollapsed() {
 export default function AppShell({ activeScreen, onNavigate, onLogout, userName, userEmail, onOpenSearch, children }: ShellProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(readCollapsed);
+  const { theme, toggle: onToggleTheme } = useTheme();
 
   useEffect(() => setDrawerOpen(false), [activeScreen]);
 
@@ -115,6 +119,8 @@ export default function AppShell({ activeScreen, onNavigate, onLogout, userName,
     onLogout,
     userName,
     userEmail,
+    theme,
+    onToggleTheme,
     onNavigate: (screen: string) => {
       setDrawerOpen(false);
       onNavigate(screen);
@@ -177,7 +183,7 @@ function RailTip({ children }: { children: ReactNode }) {
   return (
     <span
       aria-hidden="true"
-      className="pointer-events-none absolute top-1/2 left-full z-50 ml-3 -translate-y-1/2 rounded-md bg-ink px-2 py-1 text-xs font-medium whitespace-nowrap text-white opacity-0 shadow-pop transition-opacity delay-0 duration-100 group-hover:opacity-100 group-hover:delay-150 group-focus-visible:opacity-100"
+      className="pointer-events-none absolute top-1/2 left-full z-50 ml-3 -translate-y-1/2 rounded-md bg-inverse px-2 py-1 text-xs font-medium whitespace-nowrap text-white opacity-0 shadow-pop transition-opacity delay-0 duration-100 group-hover:opacity-100 group-hover:delay-150 group-focus-visible:opacity-100"
     >
       {children}
     </span>
@@ -193,7 +199,9 @@ function SidebarContent({
   onOpenSearch,
   collapsed,
   onToggleCollapsed,
-}: Omit<ShellProps, "children"> & { collapsed: boolean; onToggleCollapsed?: () => void }) {
+  theme,
+  onToggleTheme,
+}: Omit<ShellProps, "children"> & { collapsed: boolean; onToggleCollapsed?: () => void; theme: "light" | "dark"; onToggleTheme: () => void }) {
   const { applications, tasks, contacts } = useData();
   const attention = attentionItems(applications, tasks);
   const urgent = attention.some((a) => a.severity !== "info");
@@ -310,6 +318,7 @@ function SidebarContent({
           placement="top"
           items={[
             { label: "Profile & resume", icon: IconProfile, onSelect: () => onNavigate("ai-coach") },
+            theme === "dark" ? { label: "Light mode", icon: IconSun, onSelect: onToggleTheme } : { label: "Dark mode", icon: IconMoon, onSelect: onToggleTheme },
             "divider",
             { label: "Sign out", icon: IconLogOut, onSelect: onLogout },
           ]}

@@ -1,12 +1,30 @@
 import { useMemo, useState } from "react";
 import { useData, type ActivityItem } from "../data/DataContext";
 import type { Task } from "../data/types";
-import { addDaysISO, daysUntil, formatDate, formatTime, todayISO } from "../data/dates";
-import { attentionItems, KIND_META, pipelineStats, upcomingItems, weeklySubmissions, type AttentionItem, type CalendarItem } from "../data/insights";
+import { addDaysISO, daysUntil, formatDate, formatTime, relativeDay, toDate, todayISO } from "../data/dates";
+import { ATTENTION_GROUP, attentionItems, KIND_META, pipelineStats, upcomingItems, weeklySubmissions, type AttentionGroup, type AttentionItem, type AttentionKind, type CalendarItem, type ItemKind } from "../data/insights";
 import { Button, Card, Checkbox, cx, DueChip, EmptyState, IconButton, Input, LinkButton, Page, Segmented, Select } from "../components/ui";
-import { ConversionFunnel, StatusDistribution, WeeklyColumns } from "../components/charts";
+import { ConversionSteps, StageBreakdown, WeeklyColumns } from "../components/charts";
 import { useFeedback, errorMessage } from "../components/feedback";
-import { IconArrowRight, IconBriefcase, IconCheck, IconCheckCircle, IconChevronRight, IconMessage, IconPlus, IconSend, IconTrash, IconTrendingUp, IconTrophy, IconUpload, type IconComponent } from "../components/icons";
+import {
+  IconArrowRight,
+  IconBriefcase,
+  IconCalendar,
+  IconCheck,
+  IconCheckCircle,
+  IconChevronRight,
+  IconFlag,
+  IconMail,
+  IconMessage,
+  IconPlus,
+  IconSend,
+  IconTaskSquare,
+  IconTrash,
+  IconTrendingUp,
+  IconTrophy,
+  IconUpload,
+  type IconComponent,
+} from "../components/icons";
 
 interface DashboardProps {
   onNavigate: (screen: string, id?: string) => void;
@@ -17,7 +35,7 @@ type Navigate = DashboardProps["onNavigate"];
 
 // Remembered for the session so the dashboard reopens on the view you last chose.
 let lastAgendaTab: "upcoming" | "tasks" = "upcoming";
-let lastPipelineTab: "stages" | "conversion" | "weekly" | "activity" = "stages";
+let lastPipelineTab: "overview" | "weekly" | "activity" = "overview";
 
 /**
  * Three questions, one card each: what needs me, what's coming, how is my search going.
@@ -34,20 +52,26 @@ export default function Dashboard({ onNavigate, userName }: DashboardProps) {
   const greeting = now.getHours() < 12 ? "Good morning" : now.getHours() < 18 ? "Good afternoon" : "Good evening";
   const firstName = userName.split(" ")[0];
 
+  // Rolling seven days including today, so the figure doesn't reset to zero every Monday.
   const weekAgo = addDaysISO(-6);
-  const appliedThisWeek = applications.filter((a) => a.appliedDate && a.appliedDate >= weekAgo && a.appliedDate <= today).length;
-  const upcomingRounds = applications.flatMap((a) => a.interviewStages.filter((s) => !s.completed && s.date && s.date >= today)).length;
+  const appliedLast7 = applications.filter((a) => a.appliedDate && a.appliedDate >= weekAgo && a.appliedDate <= today).length;
+  // Only rounds for applications still in play; a closed one's leftover dates aren't "upcoming".
+  const nextRounds = applications
+    .filter((a) => a.status === "applied" || a.status === "interviewing")
+    .flatMap((a) => a.interviewStages.filter((s) => !s.completed && s.date && s.date >= today).map((s) => ({ company: a.company, date: s.date })))
+    .sort((a, b) => a.date.localeCompare(b.date));
+  const nextRound = nextRounds[0];
 
   const summary =
     applications.length === 0
       ? "Let's get your search organized."
       : attention.length > 0
-        ? `${attention.length} ${attention.length === 1 ? "thing needs" : "things need"} your attention today.`
+        ? `${attention.length} ${attention.length === 1 ? "thing needs" : "things need"} your attention.`
         : "You're all caught up.";
 
   return (
     <Page width="medium">
-      <header className="mb-8 flex flex-wrap items-end justify-between gap-4 lg:mb-10">
+      <header className="mb-6 flex flex-wrap items-end justify-between gap-4 lg:mb-7">
         <div>
           <p className="text-ui text-fg-muted">{now.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}</p>
           <h1 className="mt-1 text-[26px] leading-tight font-semibold tracking-[-0.025em] text-fg">
@@ -68,17 +92,49 @@ export default function Dashboard({ onNavigate, userName }: DashboardProps) {
           </Card>
         </div>
       ) : (
-        <div className="space-y-6">
+        <div className="space-y-5 lg:space-y-6">
           <Stats
             items={[
-              { label: "In progress", tone: "applied", icon: IconSend, value: stats.active, sub: appliedThisWeek ? `${appliedThisWeek} applied this week` : `${stats.total} tracked in total`, onClick: () => onNavigate("pipeline") },
-              { label: "Interviewing", tone: "interviewing", icon: IconMessage, value: stats.interviewing, sub: upcomingRounds ? `${upcomingRounds} upcoming ${upcomingRounds === 1 ? "round" : "rounds"}` : "None scheduled", onClick: () => onNavigate("applications", "interviewing") },
-              { label: "Offers", tone: "offer", icon: IconTrophy, value: stats.offers, sub: stats.offers ? "Congratulations!" : "Not yet", onClick: () => onNavigate("applications", "offer") },
-              { label: "Response rate", tone: "accent", icon: IconTrendingUp, value: stats.responseRate === null ? "—" : `${stats.responseRate}%`, meter: stats.responseRate, sub: stats.submitted ? `${stats.heardBack} of ${stats.submitted} heard back` : "Nothing submitted yet" },
+              {
+                label: "In progress",
+                tone: "applied",
+                icon: IconSend,
+                value: stats.active,
+                sub: appliedLast7 ? `${appliedLast7} applied in the last 7 days` : stats.awaiting ? `${stats.awaiting} awaiting a reply` : `${stats.wishlist} on your wishlist`,
+                hint: "Applications in Applied or Interviewing",
+                onClick: () => onNavigate("pipeline"),
+              },
+              {
+                label: "Interviewing",
+                tone: "interviewing",
+                icon: IconMessage,
+                value: stats.interviewing,
+                sub: nextRound ? `Next: ${nextRound.company}, ${relativeDay(nextRound.date).toLowerCase()}` : "No rounds scheduled",
+                hint: "Applications currently in interview rounds",
+                onClick: () => onNavigate("applications", "interviewing"),
+              },
+              {
+                label: "Offers",
+                tone: "offer",
+                icon: IconTrophy,
+                value: stats.offers,
+                sub: stats.interviewed ? `From ${stats.interviewed} ${stats.interviewed === 1 ? "application" : "applications"} interviewed` : "None yet",
+                hint: "Applications with an offer",
+                onClick: () => onNavigate("applications", "offer"),
+              },
+              {
+                label: "Response rate",
+                tone: "accent",
+                icon: IconTrendingUp,
+                value: stats.responseRate === null ? "—" : `${stats.responseRate}%`,
+                meter: stats.responseRate,
+                sub: stats.submitted ? `${stats.heardBack} of ${stats.submitted} submitted heard back` : "Nothing submitted yet",
+                hint: "Submitted applications that got any reply: an interview, offer or rejection",
+              },
             ]}
           />
 
-          <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-5">
+          <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-5 lg:gap-6">
             <AttentionCard items={attention} onNavigate={onNavigate} className="lg:col-span-3" />
             <AgendaCard upcoming={upcoming} onNavigate={onNavigate} className="lg:col-span-2" />
           </div>
@@ -106,6 +162,8 @@ interface StatItem {
   label: string;
   value: number | string;
   sub: string;
+  /** What the number counts, shown on hover and read to screen readers. */
+  hint: string;
   tone: StatTone;
   icon: IconComponent;
   /** 0–100, drawn as a slim meter under the value. */
@@ -122,27 +180,32 @@ function Stats({ items }: { items: StatItem[] }) {
           <>
             <span className={cx("pointer-events-none absolute inset-x-0 top-0 h-16 bg-gradient-to-b to-transparent", tone.glow)} aria-hidden="true" />
             <span className="relative flex items-center justify-between">
-              <span className="text-ui font-medium text-fg-2">{item.label}</span>
+              <span className="text-ui font-medium text-fg-2">
+                {item.label}
+                <span className="sr-only">. {item.hint}.</span>
+              </span>
               <span className={cx("flex size-7 items-center justify-center rounded-lg", tone.chip)}>
                 <item.icon size={15} strokeWidth={2} />
               </span>
             </span>
-            <span className="relative mt-3 block text-[30px] leading-none font-semibold tracking-[-0.03em] text-fg">{item.value}</span>
+            <span className="relative mt-2.5 block text-[28px] leading-none font-semibold tracking-[-0.03em] text-fg">{item.value}</span>
             {item.meter !== undefined && (
               <span className="relative mt-3 block h-1.5 overflow-hidden rounded-full bg-muted" aria-hidden="true">
                 <span className={cx("block h-full rounded-full", tone.meter)} style={{ width: `${item.meter ?? 0}%` }} />
               </span>
             )}
-            <span className="relative mt-auto block truncate pt-2 text-xs text-fg-muted">{item.sub}</span>
+            <span className="relative mt-auto line-clamp-2 block pt-2 text-xs text-fg-muted sm:truncate" title={item.sub}>
+              {item.sub}
+            </span>
           </>
         );
         const cls = "relative flex min-w-0 flex-col justify-start overflow-hidden rounded-card border border-line bg-surface p-4 text-left";
         return item.onClick ? (
-          <button key={item.label} type="button" onClick={item.onClick} className={cx(cls, "transition-[border-color,box-shadow] hover:border-line-strong hover:shadow-card-hover")}>
+          <button key={item.label} type="button" title={item.hint} onClick={item.onClick} className={cx(cls, "transition-[border-color,box-shadow] hover:border-line-strong hover:shadow-card-hover")}>
             {body}
           </button>
         ) : (
-          <div key={item.label} className={cls}>
+          <div key={item.label} title={item.hint} className={cls}>
             {body}
           </div>
         );
@@ -153,11 +216,14 @@ function Stats({ items }: { items: StatItem[] }) {
 
 // ---------- Section shell ----------
 
-function Section({ title, action, children, className }: { title: string; action?: React.ReactNode; children: React.ReactNode; className?: string }) {
+function Section({ title, count, action, children, className }: { title: string; count?: number; action?: React.ReactNode; children: React.ReactNode; className?: string }) {
   return (
     <Card className={cx("flex flex-col", className)}>
-      <div className="flex min-h-14 flex-wrap items-center justify-between gap-x-3 gap-y-2 px-5 pt-4 pb-3">
-        <h2 className="text-[15px] font-semibold tracking-[-0.01em] text-fg">{title}</h2>
+      <div className="flex min-h-13 flex-wrap items-center justify-between gap-x-3 gap-y-2 px-5 pt-3.5 pb-2.5">
+        <h2 className="flex items-center gap-2 text-base font-semibold tracking-[-0.01em] text-fg">
+          {title}
+          {count !== undefined && <span className="rounded-full bg-muted px-1.5 text-2xs font-medium text-fg-2 tabular-nums">{count}</span>}
+        </h2>
         {action && <div className="max-w-full min-w-0">{action}</div>}
       </div>
       {children}
@@ -167,54 +233,155 @@ function Section({ title, action, children, className }: { title: string; action
 
 // ---------- Needs attention ----------
 
-const SEVERITY_DOT: Record<AttentionItem["severity"], string> = {
-  danger: "bg-danger",
-  warning: "bg-warning",
-  info: "bg-line-strong",
+const ATTENTION_GROUPS: { value: AttentionGroup; label: string; icon: IconComponent }[] = [
+  { value: "tasks", label: "Tasks", icon: IconTaskSquare },
+  { value: "deadlines", label: "Deadlines", icon: IconFlag },
+  { value: "interviews", label: "Interviews", icon: IconMessage },
+  { value: "follow-ups", label: "Follow-ups", icon: IconMail },
+];
+
+const KIND_LABEL: Record<AttentionKind, string> = {
+  "task-overdue": "Overdue task",
+  "task-today": "Task",
+  "deadline-passed": "Missed deadline",
+  "deadline-soon": "Deadline",
+  "interview-soon": "Interview prep",
+  "stage-unlogged": "Log outcome",
+  "follow-up": "Follow-up",
 };
 
+// Color only carries urgency; the icon carries the kind.
+const SEVERITY_TEXT: Record<AttentionItem["severity"], string> = {
+  danger: "text-danger-fg",
+  warning: "text-warning-fg",
+  info: "text-fg-muted",
+};
+const SEVERITY_TILE: Record<AttentionItem["severity"], string> = {
+  danger: "bg-danger-soft text-danger-fg",
+  warning: "bg-warning-soft text-warning-fg",
+  info: "bg-muted text-fg-muted",
+};
+
+const ATTENTION_LIMIT = 5;
+
 function AttentionCard({ items, onNavigate, className }: { items: AttentionItem[]; onNavigate: Navigate; className?: string }) {
-  const { setTaskDone } = useData();
+  const { applications, setTaskDone, updateApplication, setStageCompleted } = useData();
   const { toast } = useFeedback();
   const [expanded, setExpanded] = useState(false);
-  const shown = expanded ? items : items.slice(0, 5);
+  const [filter, setFilter] = useState<AttentionGroup | "all">("all");
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const counts = new Map<AttentionGroup, number>();
+  for (const item of items) counts.set(ATTENTION_GROUP[item.kind], (counts.get(ATTENTION_GROUP[item.kind]) ?? 0) + 1);
+  const groups = ATTENTION_GROUPS.filter((g) => counts.has(g.value));
+  // Resolving the last item of a kind drops its filter; fall back to everything.
+  const active = filter !== "all" && counts.has(filter) ? filter : "all";
+  const filtered = active === "all" ? items : items.filter((i) => ATTENTION_GROUP[i.kind] === active);
+  const shown = expanded ? filtered : filtered.slice(0, ATTENTION_LIMIT);
+
+  const run = async (item: AttentionItem, action: () => Promise<void>, done: string, undo: () => Promise<void>) => {
+    setBusy(item.key);
+    try {
+      await action();
+      toast(done, { action: { label: "Undo", onClick: () => undo().catch((e) => toast(`Couldn't undo: ${errorMessage(e)}`, { tone: "error" })) } });
+    } catch (e) {
+      toast(`Couldn't update: ${errorMessage(e)}`, { tone: "error" });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const resolveAction = (item: AttentionItem): { label: string; onClick: () => void } | null => {
+    if (item.taskId) {
+      const id = item.taskId;
+      return { label: "Done", onClick: () => run(item, () => setTaskDone(id, true), "Task completed", () => setTaskDone(id, false)) };
+    }
+    if (item.kind === "deadline-soon" && item.appId) {
+      const app = applications.find((a) => a.id === item.appId);
+      if (!app) return null;
+      return {
+        label: "Mark applied",
+        onClick: () => run(item, () => updateApplication(app.id, { status: "applied" }), `${app.company} moved to Applied`, () => updateApplication(app.id, { status: "wishlist", appliedDate: app.appliedDate })),
+      };
+    }
+    if (item.kind === "stage-unlogged" && item.stageId) {
+      const id = item.stageId;
+      return { label: "Mark done", onClick: () => run(item, () => setStageCompleted(id, true), "Round marked complete", () => setStageCompleted(id, false)) };
+    }
+    return null;
+  };
 
   return (
-    <Section title="Needs attention" className={className} action={items.length > 0 && <span className="text-ui text-fg-muted tabular-nums">{items.length}</span>}>
+    <Section
+      title="Needs attention"
+      count={items.length || undefined}
+      className={className}
+      action={
+        groups.length > 1 && (
+          <div className="-mx-1 overflow-x-auto px-1">
+            <Segmented
+              size="sm"
+              label="Filter attention items"
+              value={active}
+              onChange={(v) => {
+                setFilter(v);
+                setExpanded(false);
+              }}
+              options={[{ value: "all" as const, label: "All" }, ...groups.map((g) => ({ value: g.value, label: `${g.label} ${counts.get(g.value)}` }))]}
+            />
+          </div>
+        )
+      }
+    >
       {items.length === 0 ? (
-        <EmptyState compact icon={IconCheckCircle} title="You're all caught up" description="Nothing overdue, closing soon or gone quiet." className="pb-10" />
+        <EmptyState compact icon={IconCheckCircle} title="You're all caught up" description="Nothing overdue, due today or waiting on you." className="my-auto pb-10" />
       ) : (
         <>
           <ul className="px-2 pb-2">
-            {shown.map((item) => (
-              <li key={item.key} className="group flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors hover:bg-subtle">
-                <span className={cx("size-2 shrink-0 rounded-full", SEVERITY_DOT[item.severity])} aria-label={item.severity === "danger" ? "Urgent" : item.severity === "warning" ? "Soon" : "Reminder"} />
-                <button type="button" disabled={!item.appId} onClick={() => item.appId && onNavigate("detail", item.appId)} className="min-w-0 flex-1 text-left">
-                  <span className="block truncate text-sm text-fg">{item.title}</span>
-                  <span className="mt-0.5 block truncate text-xs text-fg-muted">{item.detail}</span>
-                </button>
-                {item.taskId ? (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    icon={IconCheck}
-                    onClick={() =>
-                      setTaskDone(item.taskId!, true)
-                        .then(() => toast("Task completed"))
-                        .catch((e) => toast(`Couldn't update task: ${errorMessage(e)}`, { tone: "error" }))
-                    }
-                  >
-                    Done
-                  </Button>
-                ) : (
-                  item.appId && <IconChevronRight size={16} className="text-fg-faint transition-colors group-hover:text-fg-muted" />
-                )}
-              </li>
-            ))}
+            {shown.map((item) => {
+              const group = ATTENTION_GROUPS.find((g) => g.value === ATTENTION_GROUP[item.kind])!;
+              const action = resolveAction(item);
+              const canOpen = !!item.appId;
+              const body = (
+                <>
+                  <span className={cx("flex size-8 shrink-0 items-center justify-center rounded-lg", SEVERITY_TILE[item.severity])}>
+                    <group.icon size={15} />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm text-fg">{item.title}</span>
+                    <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs text-fg-muted">
+                      <span className={cx("shrink-0 font-medium", SEVERITY_TEXT[item.severity])}>{item.when}</span>
+                      <span aria-hidden="true">·</span>
+                      <span className="truncate">{[KIND_LABEL[item.kind], item.detail].filter(Boolean).join(" · ")}</span>
+                    </span>
+                  </span>
+                </>
+              );
+              return (
+                <li key={item.key} className="group flex items-center gap-2 rounded-lg pr-2 transition-colors hover:bg-subtle">
+                  {canOpen ? (
+                    <button type="button" onClick={() => onNavigate("detail", item.appId)} className="flex min-w-0 flex-1 items-center gap-3 rounded-lg py-2 pl-3 text-left" aria-label={`${item.title}. ${item.when}. Open application`}>
+                      {body}
+                    </button>
+                  ) : (
+                    <div className="flex min-w-0 flex-1 items-center gap-3 py-2 pl-3">{body}</div>
+                  )}
+                  {action ? (
+                    <Button size="sm" variant="secondary" icon={IconCheck} loading={busy === item.key} disabled={busy !== null && busy !== item.key} onClick={action.onClick} aria-label={`${action.label}: ${item.title}`} className="shrink-0">
+                      <span className="max-sm:sr-only">{action.label}</span>
+                    </Button>
+                  ) : (
+                    canOpen && <IconChevronRight size={16} className="mr-1 shrink-0 text-fg-faint transition-colors group-hover:text-fg-muted" aria-hidden="true" />
+                  )}
+                </li>
+              );
+            })}
           </ul>
-          {items.length > 5 && (
+          {filtered.length > ATTENTION_LIMIT && (
             <div className="mt-auto border-t border-line px-5 py-2.5">
-              <LinkButton onClick={() => setExpanded((e) => !e)}>{expanded ? "Show fewer" : `Show ${items.length - 5} more`}</LinkButton>
+              <LinkButton onClick={() => setExpanded((e) => !e)} aria-expanded={expanded}>
+                {expanded ? "Show fewer" : `Show ${filtered.length - ATTENTION_LIMIT} more`}
+              </LinkButton>
             </div>
           )}
         </>
@@ -229,8 +396,16 @@ function dayHeading(iso: string) {
   const d = daysUntil(iso);
   if (d === 0) return "Today";
   if (d === 1) return "Tomorrow";
-  return formatDate(iso, { weekday: true });
+  return toDate(iso).toLocaleDateString("en-US", { weekday: "long" });
 }
+
+// Monochrome glyphs tinted by the calendar's kind colors, so the agenda and Calendar read the same.
+const KIND_ICON: Record<ItemKind, { icon: IconComponent; text: string }> = {
+  interview: { icon: IconMessage, text: "text-kind-interview" },
+  deadline: { icon: IconFlag, text: "text-kind-deadline" },
+  task: { icon: IconTaskSquare, text: "text-kind-task" },
+  event: { icon: IconCalendar, text: "text-kind-event" },
+};
 
 function AgendaCard({ upcoming, onNavigate, className }: { upcoming: CalendarItem[]; onNavigate: Navigate; className?: string }) {
   const { tasks } = useData();
@@ -263,14 +438,18 @@ function AgendaCard({ upcoming, onNavigate, className }: { upcoming: CalendarIte
   );
 }
 
+const AGENDA_LIMIT = 5;
+
 function UpcomingList({ items, onNavigate }: { items: CalendarItem[]; onNavigate: Navigate }) {
-  const shown = items.slice(0, 4);
+  const { applications } = useData();
+  const shown = items.slice(0, AGENDA_LIMIT);
   const groups: { date: string; items: CalendarItem[] }[] = [];
   for (const item of shown) {
     const last = groups[groups.length - 1];
     if (last?.date === item.date) last.items.push(item);
     else groups.push({ date: item.date, items: [item] });
   }
+  const companyOf = (id: string | null) => (id ? applications.find((a) => a.id === id)?.company ?? "" : "");
   const open = (item: CalendarItem) => {
     if (item.event) onNavigate("calendar", item.event.id);
     else if (item.applicationId) onNavigate("detail", item.applicationId);
@@ -278,37 +457,59 @@ function UpcomingList({ items, onNavigate }: { items: CalendarItem[]; onNavigate
   };
 
   if (groups.length === 0) {
-    return <EmptyState compact title="Nothing in the next two weeks" description="Interviews, deadlines and events show up here." className="pb-10" />;
+    return (
+      <EmptyState
+        compact
+        icon={IconCalendar}
+        title="Nothing in the next two weeks"
+        description="Interviews, deadlines, dated tasks and events show up here."
+        actions={
+          <Button size="sm" onClick={() => onNavigate("calendar")}>
+            Open Calendar
+          </Button>
+        }
+        className="my-auto pb-10"
+      />
+    );
   }
 
   return (
     <>
-      <div className="space-y-3 px-2 pb-2">
-        {groups.map((group) => (
-          <div key={group.date}>
-            <p className={cx("px-3 pb-0.5 text-xs font-medium", daysUntil(group.date) === 0 ? "text-accent-fg" : "text-fg-muted")}>{dayHeading(group.date)}</p>
-            <ul>
-              {group.items.map((item) => (
-                <li key={item.id}>
-                  <button type="button" onClick={() => open(item)} className="flex w-full items-start gap-3 rounded-lg px-3 py-2 text-left transition-colors hover:bg-subtle">
-                    <span className={cx("mt-[7px] size-1.5 shrink-0 rounded-full", KIND_META[item.kind].dot)} aria-hidden="true" />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm text-fg">{item.label}</span>
-                      <span className="block truncate text-xs text-fg-muted">
-                        {KIND_META[item.kind].label}
-                        {item.time && ` · ${formatTime(item.time)}`}
-                      </span>
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ))}
+      <div className="space-y-2.5 px-2 pb-2">
+        {groups.map((group) => {
+          const isToday = daysUntil(group.date) === 0;
+          return (
+            <section key={group.date} aria-label={`${dayHeading(group.date)}, ${formatDate(group.date)}`}>
+              <h3 className="flex items-baseline gap-1.5 px-3 pb-0.5 text-xs">
+                <span className={cx("font-semibold", isToday ? "text-accent-fg" : "text-fg-2")}>{dayHeading(group.date)}</span>
+                <span className="text-fg-muted">{formatDate(group.date)}</span>
+              </h3>
+              <ul>
+                {group.items.map((item) => {
+                  const kind = KIND_ICON[item.kind];
+                  // Tasks and events don't carry the role; show whichever context the item has.
+                  const context = item.kind === "interview" || item.kind === "deadline" ? item.detail : companyOf(item.applicationId);
+                  return (
+                    <li key={item.id}>
+                      <button type="button" onClick={() => open(item)} className="flex w-full items-start gap-3 rounded-lg px-3 py-1.5 text-left transition-colors hover:bg-subtle">
+                        <kind.icon size={15} className={cx("mt-0.5", kind.text)} />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm text-fg">{item.label}</span>
+                          <span className="block truncate text-xs text-fg-muted">{[KIND_META[item.kind].label, context].filter(Boolean).join(" · ")}</span>
+                        </span>
+                        {item.time && <span className="mt-0.5 shrink-0 text-xs text-fg-2 tabular-nums">{formatTime(item.time)}</span>}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          );
+        })}
       </div>
       <div className="mt-auto border-t border-line px-5 py-2.5">
         <LinkButton onClick={() => onNavigate("calendar")}>
-          {items.length > shown.length ? `${items.length - shown.length} more in Calendar` : "Open Calendar"} <IconArrowRight size={14} />
+          {items.length > shown.length ? `${items.length - shown.length} more in the next two weeks` : "Open Calendar"} <IconArrowRight size={14} />
         </LinkButton>
       </div>
     </>
@@ -367,7 +568,7 @@ function TasksPanel({ embedded }: { embedded?: boolean }) {
     <div className="flex flex-1 flex-col">
       {!embedded && (
         <div className="flex items-center justify-between px-4 pt-3 pb-2">
-          <h2 className="text-[15px] font-semibold tracking-[-0.01em] text-fg">Tasks</h2>
+          <h2 className="text-base font-semibold tracking-[-0.01em] text-fg">Tasks</h2>
         </div>
       )}
 
@@ -467,6 +668,9 @@ function TaskRow({ task, onToggle, onDelete }: { task: Task; onToggle: () => voi
 
 // ---------- Pipeline: one view at a time ----------
 
+/** Below this many submissions a single reply swings the rates by 20+ points, so we say so. */
+const SMALL_SAMPLE = 5;
+
 function PipelineCard({ onNavigate }: { onNavigate: Navigate }) {
   const { applications, recentActivity } = useData();
   const stats = useMemo(() => pipelineStats(applications), [applications]);
@@ -476,13 +680,6 @@ function PipelineCard({ onNavigate }: { onNavigate: Navigate }) {
     lastPipelineTab = t;
     setTabState(t);
   };
-
-  const caption = {
-    stages: `${stats.total} tracked · ${stats.submitted} submitted. Select a stage to see those applications.`,
-    conversion: "How far your submitted applications have gotten. Hover a step for its conversion.",
-    weekly: `${weeks.reduce((n, w) => n + w.count, 0)} applications submitted in the last 12 weeks.`,
-    activity: "The latest changes across your applications.",
-  }[tab];
 
   return (
     <Section
@@ -495,8 +692,7 @@ function PipelineCard({ onNavigate }: { onNavigate: Navigate }) {
             value={tab}
             onChange={setTab}
             options={[
-              { value: "stages", label: "Stages" },
-              { value: "conversion", label: "Conversion" },
+              { value: "overview", label: "Overview" },
               { value: "weekly", label: "Weekly" },
               { value: "activity", label: "Activity" },
             ]}
@@ -504,30 +700,52 @@ function PipelineCard({ onNavigate }: { onNavigate: Navigate }) {
         </div>
       }
     >
-      <div className="px-5 pb-5">
-        <p className="mb-5 text-ui text-fg-muted">{caption}</p>
-        <div>
-          {tab === "stages" && <StatusDistribution applications={applications} onSelect={(s) => onNavigate("applications", s)} />}
-          {tab === "conversion" &&
-            (stats.submitted === 0 ? (
-              <p className="text-ui text-fg-muted">Conversion appears once you've submitted an application.</p>
-            ) : (
-              <div className="max-w-xl">
-                <ConversionFunnel
-                  steps={[
-                    { label: "Submitted", value: stats.submitted },
-                    { label: "Heard back", value: stats.heardBack },
-                    { label: "Interviewed", value: stats.interviewed },
-                    { label: "Offer", value: stats.offers },
-                  ]}
-                />
-              </div>
-            ))}
-          {tab === "weekly" && <WeeklyColumns weeks={weeks} />}
-          {tab === "activity" && <ActivityList items={recentActivity} onNavigate={onNavigate} />}
-        </div>
+      <div className="px-5 pt-1 pb-5">
+        {tab === "overview" && (
+          <div className="grid gap-6 min-[1400px]:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] min-[1400px]:gap-8">
+            <div>
+              <SubHeading title="By stage" note={`${stats.total} tracked · select a stage to filter`} />
+              <StageBreakdown applications={applications} onSelect={(s) => onNavigate("applications", s)} />
+            </div>
+            <div className="border-line max-[1400px]:border-t max-[1400px]:pt-5 min-[1400px]:border-l min-[1400px]:pl-8">
+              <SubHeading title="Conversion" />
+              {stats.submitted === 0 ? (
+                <p className="text-ui text-fg-muted">Rates appear once you've moved an application past Wishlist.</p>
+              ) : (
+                <>
+                  <ConversionSteps
+                    steps={[
+                      { label: "Submitted", value: stats.submitted },
+                      { label: "Heard back", value: stats.heardBack },
+                      { label: "Interviewed", value: stats.interviewed },
+                      { label: "Offer", value: stats.offers },
+                    ]}
+                  />
+                  <p className="mt-4 text-xs text-fg-muted">
+                    Each rate is the share of the step before it.
+                    {stats.submitted < SMALL_SAMPLE && " With only a few submissions, expect these to move a lot."}
+                  </p>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+        {tab === "weekly" && (
+<WeeklyColumns weeks={weeks} title="Submissions per week" />
+        )}
+        {tab === "activity" &&
+          (recentActivity.length === 0 ? <p className="text-ui text-fg-muted">Changes to your applications show up here.</p> : <ActivityList items={recentActivity} onNavigate={onNavigate} />)}
       </div>
     </Section>
+  );
+}
+
+function SubHeading({ title, note }: { title: string; note?: string }) {
+  return (
+    <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-3">
+      <h3 className="text-xs font-semibold text-fg-2">{title}</h3>
+      {note && <p className="text-xs text-fg-muted">{note}</p>}
+    </div>
   );
 }
 

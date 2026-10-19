@@ -138,7 +138,7 @@ export default function SankeyDiagram({ applications }: { applications: Applicat
           {tip && (
             <div
               role="tooltip"
-              className="pointer-events-none absolute z-10 rounded-md bg-ink px-2.5 py-1.5 text-xs whitespace-nowrap text-white shadow-pop"
+              className="pointer-events-none absolute z-10 rounded-md bg-inverse px-2.5 py-1.5 text-xs whitespace-nowrap text-white shadow-pop"
               style={{ left: `${(tip.x / W) * 100}%`, top: `${(tip.y / H) * 100}%`, transform: "translate(-50%, calc(-100% - 8px))" }}
             >
               <span className="font-semibold tabular-nums">{tip.value}</span> <span className="text-white/70">{tip.text}</span>
