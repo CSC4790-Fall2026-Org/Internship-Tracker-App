@@ -12,10 +12,12 @@ import {
   type CareerLogInput,
 } from "../data/careerLog";
 import { formatDate, todayISO } from "../data/dates";
-import { Badge, Banner, Button, Card, cx, EmptyState, Field, Input, Page, PageHeader, Select, Skeleton, Textarea } from "../components/ui";
+import { useData } from "../data/DataContext";
+import type { Application } from "../data/types";
+import { Badge, Banner, Button, Card, CompanyLogo, cx, EmptyState, Field, Input, LinkButton, Page, PageHeader, Select, Skeleton, Textarea } from "../components/ui";
 import { Modal } from "../components/overlay";
 import { errorMessage, useFeedback } from "../components/feedback";
-import { IconAlertCircle, IconCheckCircle, IconFile, IconFlag, IconGraduation, IconMessage, IconPlus, IconRefresh, IconSearch, IconTrash, IconTrophy, IconX, type IconComponent } from "../components/icons";
+import { IconAlertCircle, IconArrowRight, IconCheckCircle, IconFile, IconFlag, IconGraduation, IconMessage, IconPlus, IconRefresh, IconSearch, IconTrash, IconTrophy, IconX, type IconComponent } from "../components/icons";
 
 const CATEGORY_STYLE: Record<CareerCategory, { icon: IconComponent; tone: "success" | "accent" | "warning" | "neutral" }> = {
   accomplishment: { icon: IconCheckCircle, tone: "success" },
@@ -25,7 +27,7 @@ const CATEGORY_STYLE: Record<CareerCategory, { icon: IconComponent; tone: "succe
   milestone: { icon: IconFlag, tone: "neutral" },
 };
 
-const EMPTY: CareerLogInput = { category: "accomplishment", title: "", details: "", impact: "", date: "" };
+const EMPTY: CareerLogInput = { category: "accomplishment", title: "", details: "", impact: "", date: "", applicationId: null };
 
 export function CategoryBadge({ category }: { category: CareerCategory }) {
   const { icon, tone } = CATEGORY_STYLE[category];
@@ -36,7 +38,8 @@ export function CategoryBadge({ category }: { category: CareerCategory }) {
   );
 }
 
-export default function CareerLog() {
+export default function CareerLog({ onNavigate }: { onNavigate: (screen: string, id?: string) => void }) {
+  const { applications } = useData();
   const [entries, setEntries] = useState<CareerLogEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -64,10 +67,16 @@ export default function CareerLog() {
     return out;
   }, [entries]);
 
+  const applicationById = useMemo(() => new Map(applications.map((a) => [a.id, a])), [applications]);
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return entries.filter((e) => (category === "all" || e.category === category) && (!q || [e.title, e.details, e.impact].some((field) => field.toLowerCase().includes(q))));
-  }, [entries, category, search]);
+    return entries.filter(
+      (e) =>
+        (category === "all" || e.category === category) &&
+        (!q || [e.title, e.details, e.impact, (e.applicationId && applicationById.get(e.applicationId)?.company) || ""].some((field) => field.toLowerCase().includes(q))),
+    );
+  }, [entries, category, search, applicationById]);
 
   const onSaved = (saved: CareerLogEntry) => setEntries((list) => sortEntries([...list.filter((e) => e.id !== saved.id), saved]));
   const onDeleted = (id: string) => setEntries((list) => list.filter((e) => e.id !== id));
@@ -83,7 +92,19 @@ export default function CareerLog() {
       <PageHeader
         title="Career log"
         description={entries.length === 0 ? "Wins, projects, feedback and skills, written down while you still remember the details." : `${entries.length} ${entries.length === 1 ? "entry" : "entries"}`}
-        actions={!loading && !loadError && addButton}
+        actions={
+          !loading &&
+          !loadError && (
+            <>
+              {entries.length > 0 && (
+                <Button icon={IconFile} onClick={() => onNavigate("brag-doc")}>
+                  Brag doc
+                </Button>
+              )}
+              {addButton}
+            </>
+          )
+        }
       />
 
       {loadError ? (
@@ -121,7 +142,7 @@ export default function CareerLog() {
         <>
           <div className="mb-3 flex flex-col gap-3">
             <div className="relative sm:w-80">
-              <Input icon={IconSearch} type="search" aria-label="Search career log" placeholder="Search titles, details, impact" value={search} onChange={(e) => setSearch(e.target.value)} className="pr-8 [&::-webkit-search-cancel-button]:hidden" />
+              <Input icon={IconSearch} type="search" aria-label="Search career log" placeholder="Search titles, details, impact, companies" value={search} onChange={(e) => setSearch(e.target.value)} className="pr-8 [&::-webkit-search-cancel-button]:hidden" />
               {search && (
                 <button type="button" aria-label="Clear search" onClick={() => setSearch("")} className="absolute top-1/2 right-2 -translate-y-1/2 rounded p-0.5 text-fg-faint hover:text-fg">
                   <IconX size={14} />
@@ -173,20 +194,21 @@ export default function CareerLog() {
               <ul>
                 {filtered.map((entry) => (
                   <li key={entry.id} className="border-b border-line last:border-b-0">
-                    <button type="button" onClick={() => setEditing(entry)} className="block w-full px-4 py-3 text-left transition-colors hover:bg-subtle">
+                    <button type="button" onClick={() => setEditing(entry)} className="block w-full px-5 py-3.5 text-left transition-colors hover:bg-subtle">
                       <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
                         <CategoryBadge category={entry.category} />
-                        <span className="min-w-0 flex-1 text-ui font-medium text-fg">{entry.title}</span>
-                        <time dateTime={entry.date} className="text-xs whitespace-nowrap text-fg-muted">
+                        <span className="min-w-0 flex-1 text-[15px] font-medium text-fg">{entry.title}</span>
+                        <time dateTime={entry.date} className="text-ui whitespace-nowrap text-fg-muted">
                           {formatDate(entry.date)}
                         </time>
                       </div>
-                      {entry.details && <p className="mt-1.5 line-clamp-2 text-ui leading-relaxed text-fg-muted">{entry.details}</p>}
                       {entry.impact && (
-                        <p className="mt-1 text-ui leading-relaxed text-fg-2">
+                        <p className="mt-2 text-sm leading-relaxed text-fg-2">
                           <span className="font-medium">Impact:</span> {entry.impact}
                         </p>
                       )}
+                      {entry.details && <p className={cx("line-clamp-2 text-sm leading-relaxed text-fg-muted", entry.impact ? "mt-1" : "mt-2")}>{entry.details}</p>}
+                      {entry.applicationId && applicationById.has(entry.applicationId) && <LinkedApplication app={applicationById.get(entry.applicationId)!} />}
                     </button>
                   </li>
                 ))}
@@ -196,28 +218,53 @@ export default function CareerLog() {
         </>
       )}
 
-      {editing && <EntryModal entry={editing === "new" ? null : editing} defaultCategory={category === "all" ? undefined : category} onClose={() => setEditing(null)} onSaved={onSaved} onDeleted={onDeleted} />}
+      {editing && (
+        <EntryModal
+          entry={editing === "new" ? null : editing}
+          defaultCategory={category === "all" ? undefined : category}
+          applications={applications}
+          onClose={() => setEditing(null)}
+          onSaved={onSaved}
+          onDeleted={onDeleted}
+          onOpenApplication={(id) => onNavigate("detail", id)}
+        />
+      )}
     </Page>
+  );
+}
+
+function LinkedApplication({ app }: { app: Application }) {
+  return (
+    <p className="mt-2 flex min-w-0 items-center gap-1.5 text-ui text-fg-muted">
+      <CompanyLogo name={app.company} initials={app.logoInitials} color={app.logoColor} size={18} />
+      <span className="truncate">
+        {app.company} · {app.position}
+      </span>
+    </p>
   );
 }
 
 function EntryModal({
   entry,
   defaultCategory,
+  applications,
   onClose,
   onSaved,
   onDeleted,
+  onOpenApplication,
 }: {
   entry: CareerLogEntry | null;
   /** New entries start in the category being filtered, if any. */
   defaultCategory?: CareerCategory;
+  applications: Application[];
   onClose: () => void;
   onSaved: (entry: CareerLogEntry) => void;
   onDeleted: (id: string) => void;
+  onOpenApplication: (id: string) => void;
 }) {
   const { toast, confirm } = useFeedback();
   const [form, setForm] = useState<CareerLogInput>(
-    entry ? { category: entry.category, title: entry.title, details: entry.details, impact: entry.impact, date: entry.date } : { ...EMPTY, category: defaultCategory ?? EMPTY.category, date: todayISO() },
+    entry ? { category: entry.category, title: entry.title, details: entry.details, impact: entry.impact, date: entry.date, applicationId: entry.applicationId } : { ...EMPTY, category: defaultCategory ?? EMPTY.category, date: todayISO() },
   );
   const [touched, setTouched] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -227,6 +274,9 @@ function EntryModal({
   const titleError = form.title.trim() ? null : "Give it a short title.";
   const dateError = form.date ? null : "Pick a date.";
   const hint = CAREER_CATEGORIES.find((c) => c.value === form.category)?.hint;
+  const sortedApplications = useMemo(() => [...applications].sort((a, b) => a.company.localeCompare(b.company) || a.position.localeCompare(b.position)), [applications]);
+  // A link to an application that has since been deleted shows as "None" rather than a blank option.
+  const linkedId = form.applicationId && applications.some((a) => a.id === form.applicationId) ? form.applicationId : "";
 
   const save = async () => {
     setTouched(true);
@@ -317,6 +367,21 @@ function EntryModal({
         <Field label="Impact" hint="Optional. The result, ideally with a number.">
           <Input value={form.impact} onChange={(e) => set("impact", e.target.value)} placeholder="e.g. Sign-up completion went from 52% to 71%" />
         </Field>
+        <Field label="Related application" hint={applications.length === 0 ? "Optional. You haven't added any applications yet." : "Optional. For interview feedback, offers and the like."}>
+          <Select value={linkedId} onChange={(e) => set("applicationId", e.target.value || null)} disabled={applications.length === 0}>
+            <option value="">None</option>
+            {sortedApplications.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.company} – {a.position}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        {entry && linkedId && linkedId === entry.applicationId && (
+          <LinkButton onClick={() => onOpenApplication(linkedId)} className="-mt-2">
+            Open application <IconArrowRight size={14} className="transition-transform duration-200 ease-snappy group-hover:translate-x-0.5" />
+          </LinkButton>
+        )}
         <button type="submit" className="sr-only" aria-hidden="true" tabIndex={-1} />
       </form>
     </Modal>

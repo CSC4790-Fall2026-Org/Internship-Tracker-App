@@ -20,6 +20,8 @@ export interface CareerLogEntry {
   details: string;
   impact: string;
   date: string;
+  /** The application this came out of, e.g. interview feedback or an offer. */
+  applicationId: string | null;
   createdAt: string;
 }
 
@@ -34,12 +36,13 @@ function toEntry(row: Tables<"career_log_entries">): CareerLogEntry {
     details: row.details,
     impact: row.impact,
     date: row.date,
+    applicationId: row.application_id,
     createdAt: row.created_at,
   };
 }
 
 function toRow(input: CareerLogInput) {
-  return { category: input.category, title: input.title.trim(), details: input.details.trim(), impact: input.impact.trim(), date: input.date };
+  return { category: input.category, title: input.title.trim(), details: input.details.trim(), impact: input.impact.trim(), date: input.date, application_id: input.applicationId };
 }
 
 /** Newest first; entries on the same day keep the order they were added in, newest first. */

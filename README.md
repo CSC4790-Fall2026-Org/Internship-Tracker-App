@@ -44,7 +44,7 @@ The **Networking** tab is the contact book: name, company, position, notes, emai
 
 The **Profile** tab lets a user upload a resume PDF. The file goes to a private `resumes` storage bucket, and the `parse-resume` Edge Function extracts the text (with `unpdf`) and sends it to Groq, which returns a structured profile saved in `resume_profiles`.
 
-The model is `openai/gpt-oss-120b`, set as `GROQ_MODEL` at the top of the function. Groq only guarantees schema-valid JSON on the `gpt-oss` models, so changing it may loosen that guarantee.
+The model is `openai/gpt-oss-120b`, set once as `GROQ_MODEL` in `supabase/functions/_shared/groq.ts` and shared by every function that calls Groq. Groq only guarantees schema-valid JSON on the `gpt-oss` models, so changing it may loosen that guarantee.
 
 Because the text is extracted locally, a scanned or image-only PDF produces nothing and the user is told to upload a text-based PDF.
 
@@ -61,3 +61,24 @@ To redeploy the function after editing `supabase/functions/parse-resume/index.ts
 ```bash
 supabase functions deploy parse-resume
 ```
+
+### Career log and brag doc
+
+The **Career log** tab is a journal of accomplishments, projects, feedback, skills and milestones, stored in `career_log_entries`. Each entry has a date, title, details, an optional impact line, and can point at one of the user's applications (deleting the application keeps the entry and drops the link).
+
+The **Brag doc** tab is a view over the same table, not separate data: it takes the accomplishment, project and feedback entries, groups them by month, quarter or year, and copies the result as plain text or Markdown. Editing an entry in the log changes the brag doc too.
+
+### Career coach
+
+The **Career coach** tab is a chat grounded in the user's own data. Each question sends the conversation plus a text summary built in `src/data/coach.ts`: applications and statuses, the dashboard's "needs attention" list, the next three weeks of deadlines, interviews, tasks and events, contacts, and the 25 most recent career log entries. It reuses the same helpers as the dashboard, so the coach and the dashboard agree on what's urgent.
+
+The `career-coach` Edge Function calls Groq with the shared model, so the API key never reaches the browser. It only answers signed-in users, caps the prompt (about 14k characters of data and the last 12 messages), times out after 45 seconds, and turns Groq rate limits into a "try again in a minute" message. Chat history lives in React state and resets when you leave the page.
+
+It uses the same `GROQ_API_KEY` secret as `parse-resume`. To deploy it, and the schema change that links log entries to applications:
+
+```bash
+supabase db push
+supabase functions deploy career-coach
+```
+
+`jobs` and `parse-resume` now import the model from `_shared/groq.ts`; redeploy them whenever that file changes.

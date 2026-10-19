@@ -11,6 +11,7 @@ import {
   IconCalendar,
   IconChevronDown,
   IconDashboard,
+  IconFile,
   IconList,
   IconLogOut,
   IconMenu,
@@ -19,6 +20,7 @@ import {
   IconProfile,
   IconSearch,
   IconSidebar,
+  IconSparkles,
   IconSun,
   IconTrophy,
   IconUsers,
@@ -36,7 +38,7 @@ interface ShellProps {
   children: ReactNode;
 }
 
-type NavId = "dashboard" | "pipeline" | "applications" | "calendar" | "jobs" | "networking" | "career-log" | "ai-coach";
+type NavId = "dashboard" | "pipeline" | "applications" | "calendar" | "jobs" | "networking" | "career-log" | "brag-doc" | "coach" | "ai-coach";
 
 const NAV: { label: string; items: { id: NavId; label: string; icon: IconComponent }[] }[] = [
   {
@@ -54,6 +56,8 @@ const NAV: { label: string; items: { id: NavId; label: string; icon: IconCompone
       { id: "jobs", label: "Jobs", icon: IconBriefcase },
       { id: "networking", label: "Networking", icon: IconUsers },
       { id: "career-log", label: "Career log", icon: IconTrophy },
+      { id: "brag-doc", label: "Brag doc", icon: IconFile },
+      { id: "coach", label: "Career coach", icon: IconSparkles },
       { id: "ai-coach", label: "Profile", icon: IconProfile },
     ],
   },
