@@ -2,7 +2,8 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { supabase } from "../lib/supabase";
 import type { Json } from "../lib/database.types";
 import { fetchResumeProfile, uploadAndParseResume, type ExperienceItem, type ResumeProfile, type UploadStage } from "../data/resume";
-import { Banner, Button, Card, CardHeader, cx, Field, Input, Page, PageHeader, Skeleton, Spinner, Textarea } from "../components/ui";
+import { CAREER_STAGES, type JobType } from "../data/jobs";
+import { Banner, Button, Card, CardHeader, cx, Field, Input, Page, PageHeader, Select, Skeleton, Spinner, Textarea } from "../components/ui";
 import { useFeedback } from "../components/feedback";
 import { IconAlertCircle, IconFile, IconPencil, IconPlus, IconSparkles, IconTrash, IconUpload, IconX } from "../components/icons";
 
@@ -85,6 +86,7 @@ export default function AiCoach({ userId }: { userId: string }) {
         skills: profile.skills,
         interests: profile.interests,
         preferred_locations: profile.preferred_locations,
+        job_type: profile.job_type,
         // jsonb column: the row type is Json, our app type is stricter.
         experience: profile.experience as unknown as Json,
       })
@@ -214,8 +216,17 @@ export default function AiCoach({ userId }: { userId: string }) {
                   <Field label="Major">
                     <Input value={profile.major} onChange={(e) => update("major", e.target.value)} />
                   </Field>
-                  <Field label="Graduation" hint="Used to choose internships vs. full-time roles">
+                  <Field label="Graduation" hint={profile.job_type === "auto" ? "Used to choose internships vs. full-time roles" : undefined}>
                     <Input value={profile.graduation} onChange={(e) => update("graduation", e.target.value)} placeholder="e.g. May 2027" />
+                  </Field>
+                  <Field label="Looking for" hint="Decides which listings the Jobs page finds">
+                    <Select value={profile.job_type} onChange={(e) => update("job_type", e.target.value as JobType)}>
+                      {CAREER_STAGES.map((s) => (
+                        <option key={s.value} value={s.value}>
+                          {s.label}
+                        </option>
+                      ))}
+                    </Select>
                   </Field>
                 </div>
               </Section>

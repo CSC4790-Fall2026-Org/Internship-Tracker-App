@@ -250,9 +250,10 @@ const SEARCH_PLAN_SCHEMA = {
 
 // What the user said they want. "auto" leaves it to the model, using the graduation date.
 const JOB_TYPE_RULE: Record<JobType, string> = {
+  // New grad hiring runs 9-12 months ahead, so a senior recruiting in the fall wants full-time roles, not internships.
   auto: `- Decide between internships and full-time roles from the graduation date and today's date:
-  - Graduating more than about 6 months from today: search internships (include "intern" in "what").
-  - Graduating within about 6 months, or already graduated: search entry-level roles (e.g. "junior", "entry level", "new grad"). One internship search is fine as a fallback.`,
+  - Graduating more than about 12 months from today: search internships (include "intern" in "what").
+  - Graduating within about 12 months, or already graduated: search new grad / entry-level roles (e.g. "new grad", "entry level", "junior"). Never include "intern".`,
   internship: `- The student wants internships. Include "intern" in every "what".`,
   new_grad: `- The student wants full-time new grad / entry-level roles. Never include "intern". Phrases like "new grad", "entry level" or "junior" are good in "what", but plain role titles (e.g. "software engineer") are fine too.`,
   full_time: `- The student wants full-time roles. Never include "intern". Use plain role titles; don't add seniority words.`,

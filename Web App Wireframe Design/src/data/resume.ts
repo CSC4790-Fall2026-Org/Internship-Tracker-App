@@ -63,7 +63,32 @@ export async function uploadAndParseResume(
   onStage?.("analyzing");
   const { data, error } = await supabase.functions.invoke("parse-resume", { body: { path } });
   if (error) throw new Error(await functionErrorMessage(error));
-  return toProfile(data.profile);
+  return applyPendingJobType(toProfile(data.profile));
+}
+
+/**
+ * What someone is looking for can be chosen in onboarding before any resume exists. It waits on the account
+ * until the first resume creates a profile, then moves there, where the Jobs page reads it.
+ */
+export async function saveCareerStage(jobType: JobType) {
+  const { error } = await supabase.auth.updateUser({ data: { job_type: jobType } });
+  if (error) throw new Error(error.message);
+}
+
+async function applyPendingJobType(profile: ResumeProfile): Promise<ResumeProfile> {
+  if (profile.job_type !== "auto") return profile;
+  const { data } = await supabase.auth.getSession();
+  const pending = data.session?.user.user_metadata?.job_type as JobType | undefined;
+  if (!pending || pending === "auto") return profile;
+  try {
+    await saveJobType(profile.id, pending);
+    // Applied once; from here on the profile's own setting wins, even if it's changed back to Auto.
+    await supabase.auth.updateUser({ data: { job_type: null } });
+    return { ...profile, job_type: pending };
+  } catch {
+    // Not worth failing the upload over: the choice can still be made on Jobs or Profile.
+    return profile;
+  }
 }
 
 /** invoke() reports only "non-2xx status code"; the real reason is in the response body. */
