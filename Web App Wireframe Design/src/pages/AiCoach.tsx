@@ -2,7 +2,8 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { supabase } from "../lib/supabase";
 import type { Json } from "../lib/database.types";
 import { fetchResumeProfile, uploadAndParseResume, type ExperienceItem, type ResumeProfile, type UploadStage } from "../data/resume";
-import { CAREER_STAGES, type JobType } from "../data/jobs";
+import { CAREER_STAGES, MAX_CAREER_FIELDS, type JobType } from "../data/jobs";
+import CareerFieldPicker from "../components/CareerFieldPicker";
 import { Banner, Button, Card, CardHeader, cx, Field, Input, Page, PageHeader, Select, Skeleton, Spinner, Textarea } from "../components/ui";
 import { useFeedback } from "../components/feedback";
 import { IconAlertCircle, IconFile, IconPencil, IconPlus, IconSparkles, IconTrash, IconUpload, IconX } from "../components/icons";
@@ -87,6 +88,7 @@ export default function AiCoach({ userId }: { userId: string }) {
         interests: profile.interests,
         preferred_locations: profile.preferred_locations,
         job_type: profile.job_type,
+        career_fields: profile.career_fields,
         // jsonb column: the row type is Json, our app type is stricter.
         experience: profile.experience as unknown as Json,
       })
@@ -229,6 +231,10 @@ export default function AiCoach({ userId }: { userId: string }) {
                     </Select>
                   </Field>
                 </div>
+              </Section>
+
+              <Section title="Field" description={`Up to ${MAX_CAREER_FIELDS}. Job matches stay inside these.`}>
+                <CareerFieldPicker size="sm" value={profile.career_fields} onChange={(v) => update("career_fields", v)} />
               </Section>
 
               <Section title="Summary">

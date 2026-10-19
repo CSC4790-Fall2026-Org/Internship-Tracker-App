@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
-import { saveCareerStage, uploadAndParseResume, type ResumeProfile, type UploadStage } from "../data/resume";
-import { CAREER_STAGES, type JobType } from "../data/jobs";
+import { saveOnboardingPreferences, uploadAndParseResume, type ResumeProfile, type UploadStage } from "../data/resume";
+import { CAREER_FIELDS, CAREER_STAGES, MAX_CAREER_FIELDS, type CareerField, type JobType } from "../data/jobs";
+import CareerFieldPicker from "../components/CareerFieldPicker";
 import { Banner, Button, cx, Spinner } from "../components/ui";
 import { BrandMark } from "../components/NavBar";
 import { IconAlertCircle, IconCheck, IconUpload } from "../components/icons";
@@ -13,7 +14,8 @@ interface OnboardingProps {
 }
 
 export default function Onboarding({ userId, userName, onFinish }: OnboardingProps) {
-  const [step, setStep] = useState<"looking-for" | "resume">("looking-for");
+  const [step, setStep] = useState<"looking-for" | "field" | "resume">("looking-for");
+  const [jobType, setJobType] = useState<JobType | null>(null);
   const [stage, setStage] = useState<UploadStage | null>(null);
   const [profile, setProfile] = useState<ResumeProfile | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -44,7 +46,16 @@ export default function Onboarding({ userId, userName, onFinish }: OnboardingPro
 
         <div className="rounded-dialog border border-line bg-surface p-6 shadow-xs sm:p-8">
           {step === "looking-for" ? (
-            <LookingFor firstName={firstName} onDone={() => setStep("resume")} />
+            <LookingFor
+              firstName={firstName}
+              initial={jobType}
+              onDone={(choice) => {
+                setJobType(choice);
+                setStep("field");
+              }}
+            />
+          ) : step === "field" ? (
+            <FieldStep jobType={jobType ?? "auto"} onBack={() => setStep("looking-for")} onDone={() => setStep("resume")} />
           ) : profile ? (
             <ProfileConfirmation
               profile={profile}
@@ -56,7 +67,7 @@ export default function Onboarding({ userId, userName, onFinish }: OnboardingPro
             />
           ) : (
             <>
-              <p className="text-ui font-medium text-accent-fg">Step 2 of 2 · Optional</p>
+              <p className="text-ui font-medium text-accent-fg">Step 3 of 3 · Optional</p>
               <h1 className="mt-1.5 text-xl font-semibold tracking-[-0.015em] text-fg">Add your resume</h1>
               <p className="mt-1.5 text-sm leading-relaxed text-fg-muted">We'll pull out your skills, experience and preferences. It powers your job matches, and you won't have to retype any of it.</p>
 
@@ -124,35 +135,14 @@ export default function Onboarding({ userId, userName, onFinish }: OnboardingPro
   );
 }
 
-function LookingFor({ firstName, onDone }: { firstName: string; onDone: () => void }) {
-  const [choice, setChoice] = useState<JobType | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const next = async () => {
-    if (!choice) return;
-    setSaving(true);
-    setError(null);
-    try {
-      await saveCareerStage(choice);
-      onDone();
-    } catch (e) {
-      setError((e as Error).message);
-      setSaving(false);
-    }
-  };
+function LookingFor({ firstName, initial, onDone }: { firstName: string; initial: JobType | null; onDone: (choice: JobType) => void }) {
+  const [choice, setChoice] = useState<JobType | null>(initial);
 
   return (
     <>
-      <p className="text-ui font-medium text-accent-fg">Step 1 of 2</p>
+      <p className="text-ui font-medium text-accent-fg">Step 1 of 3</p>
       <h1 className="mt-1.5 text-xl font-semibold tracking-[-0.015em] text-fg">Welcome, {firstName}</h1>
       <p className="mt-1.5 text-sm leading-relaxed text-fg-muted">What are you looking for? This decides which listings the Jobs page finds for you.</p>
-
-      {error && (
-        <Banner icon={IconAlertCircle} className="mt-5">
-          Couldn't save that: {error}
-        </Banner>
-      )}
 
       <div role="radiogroup" aria-label="What are you looking for?" className="mt-5 space-y-2">
         {CAREER_STAGES.map((option) => {
@@ -181,10 +171,61 @@ function LookingFor({ firstName, onDone }: { firstName: string; onDone: () => vo
         })}
       </div>
 
-      <Button variant="primary" size="lg" onClick={next} loading={saving} disabled={!choice} className="mt-6 w-full">
+      <Button variant="primary" size="lg" onClick={() => choice && onDone(choice)} disabled={!choice} className="mt-6 w-full">
         Continue
       </Button>
       <p className="mt-2.5 text-center text-xs text-fg-muted">You can change this any time on the Jobs or Profile page.</p>
+    </>
+  );
+}
+
+function FieldStep({ jobType, onBack, onDone }: { jobType: JobType; onBack: () => void; onDone: () => void }) {
+  const [fields, setFields] = useState<CareerField[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const save = async (careerFields: CareerField[]) => {
+    setSaving(true);
+    setError(null);
+    try {
+      await saveOnboardingPreferences({ jobType, careerFields });
+      onDone();
+    } catch (e) {
+      setError((e as Error).message);
+      setSaving(false);
+    }
+  };
+
+  return (
+    <>
+      <p className="text-ui font-medium text-accent-fg">Step 2 of 3</p>
+      <h1 className="mt-1.5 text-xl font-semibold tracking-[-0.015em] text-fg">What field are you in?</h1>
+      <p className="mt-1.5 text-sm leading-relaxed text-fg-muted">Pick up to {MAX_CAREER_FIELDS}. Job matches stay inside these, so you won't see roles from fields you don't work in.</p>
+
+      {error && (
+        <Banner icon={IconAlertCircle} className="mt-5">
+          Couldn't save that: {error}
+        </Banner>
+      )}
+
+      <div className="mt-5">
+        <CareerFieldPicker value={fields} onChange={setFields} />
+      </div>
+      <p className="mt-2.5 min-h-4 text-xs text-fg-muted" aria-live="polite">
+        {fields.length >= MAX_CAREER_FIELDS && `That's ${MAX_CAREER_FIELDS}. Unselect one to pick another.`}
+      </p>
+
+      <Button variant="primary" size="lg" onClick={() => save(fields)} loading={saving} disabled={fields.length === 0} className="mt-6 w-full">
+        Continue
+      </Button>
+      <div className="mt-2 flex items-center justify-between">
+        <Button variant="ghost" onClick={onBack} disabled={saving}>
+          Back
+        </Button>
+        <Button variant="ghost" onClick={() => save([])} disabled={saving}>
+          Skip
+        </Button>
+      </div>
     </>
   );
 }
@@ -196,6 +237,7 @@ function ProfileConfirmation({ profile, onFinish, onRetry }: { profile: ResumePr
     { label: "Major", value: profile.major },
     { label: "Graduation", value: profile.graduation },
     { label: "Looking for", value: CAREER_STAGES.find((s) => s.value === profile.job_type && s.value !== "auto")?.hint ?? "" },
+    { label: "Fields", value: profile.career_fields.map((f) => CAREER_FIELDS.find((c) => c.value === f)?.label).join(", ") },
     { label: "Skills", value: profile.skills.slice(0, 6).join(", ") + (profile.skills.length > 6 ? ` +${profile.skills.length - 6} more` : "") },
     { label: "Experience", value: `${profile.experience.length} ${profile.experience.length === 1 ? "entry" : "entries"}` },
   ].filter((row) => row.value);

@@ -277,6 +277,7 @@ export type Database = {
       }
       job_recommendations: {
         Row: {
+          career_fields: string[]
           created_at: string
           generated_at: string
           id: string
@@ -287,6 +288,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          career_fields?: string[]
           created_at?: string
           generated_at?: string
           id?: string
@@ -297,6 +299,7 @@ export type Database = {
           user_id?: string
         }
         Update: {
+          career_fields?: string[]
           created_at?: string
           generated_at?: string
           id?: string
@@ -310,6 +313,7 @@ export type Database = {
       }
       resume_profiles: {
         Row: {
+          career_fields: string[]
           created_at: string
           email: string
           experience: Json
@@ -331,6 +335,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          career_fields?: string[]
           created_at?: string
           email?: string
           experience?: Json
@@ -352,6 +357,7 @@ export type Database = {
           user_id?: string
         }
         Update: {
+          career_fields?: string[]
           created_at?: string
           email?: string
           experience?: Json

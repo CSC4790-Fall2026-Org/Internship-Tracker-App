@@ -100,7 +100,27 @@ interface Profile {
   interests: string[];
   preferred_locations: string[];
   experience: { title?: string; organization?: string; highlight?: string }[];
+  career_fields: string[];
 }
+
+// Same codes as CAREER_FIELDS in the app and the check constraint on resume_profiles.career_fields.
+const FIELD_LABEL: Record<string, string> = {
+  software: "Software & IT",
+  engineering: "Engineering",
+  data: "Data & analytics",
+  healthcare: "Healthcare",
+  finance: "Finance & accounting",
+  business: "Business & consulting",
+  marketing: "Marketing & sales",
+  design: "Design & creative",
+  science: "Science & research",
+  education: "Education",
+  government: "Government & nonprofit",
+  law: "Law & policy",
+  media: "Media & communications",
+};
+
+const fieldsText = (fields: string[]) => fields.map((f) => FIELD_LABEL[f]).filter(Boolean).join(", ");
 
 class HttpError extends Error {
   constructor(public status: number, message: string) {
@@ -276,7 +296,8 @@ Rules:
 - "what" is 2 to 4 words that would appear in a job title. Short queries match more listings.
 ${JOB_TYPE_RULE[jobType]}
 - "where" is one US city or state taken from the preferred locations. If there are none, or the preference is remote, use an empty string. For remote, add "remote" to "what" instead.
-- Make the 3 searches different from each other: different roles or different locations, not rewordings.`;
+- Make the 3 searches different from each other: different roles or different locations, not rewordings.
+- If the profile lists Fields, every search must be a role in one of them, spread across them when there are several. The fields say what kind of work the student wants; don't drift into another field just because a skill would fit there.`;
 
 function profileText(profile: Profile) {
   const experience = profile.experience
@@ -284,6 +305,7 @@ function profileText(profile: Profile) {
     .map((e) => `- ${e.title ?? ""} at ${e.organization ?? ""}: ${e.highlight ?? ""}`)
     .join("\n");
   return [
+    `Fields: ${fieldsText(profile.career_fields) || "not stated"}`,
     `School: ${profile.school || "unknown"}`,
     `Major: ${profile.major || "unknown"}`,
     `Graduation: ${profile.graduation || "unknown"}`,
@@ -335,7 +357,8 @@ Rules:
 - Be honest. Leave out senior roles, roles demanding years of experience the student lacks, and roles in unrelated fields, even if that means returning fewer than ${MAX_RECOMMENDATIONS}.
 - Listing descriptions are short, truncated snippets. Don't claim details the snippet doesn't contain.
 - matched_skills must come from the student's profile, not the listing.
-- Only use ids from the listings provided, copied exactly.${
+- Only use ids from the listings provided, copied exactly.
+- If the profile lists Fields, leave out listings outside them.${
   jobType === "auto" ? "" : `\n- The student is looking for ${JOB_TYPE_LABEL[jobType]}. Leave out listings of any other kind.`
 }`;
 
@@ -380,23 +403,25 @@ async function recommend(
 ) {
   const { data: profileRow, error: profileError } = await supabase
     .from("resume_profiles")
-    .select("school, major, graduation, summary, skills, interests, preferred_locations, experience, job_type")
+    .select("school, major, graduation, summary, skills, interests, preferred_locations, experience, job_type, career_fields")
     .eq("user_id", userId)
     .maybeSingle();
   if (profileError) throw new HttpError(500, `Couldn't read your profile: ${profileError.message}`);
   if (!profileRow) throw new HttpError(400, "Upload your resume on the Profile page first, so there's something to match against.");
   const profile = profileRow as unknown as Profile;
   profile.experience = Array.isArray(profile.experience) ? profile.experience : [];
+  profile.career_fields = Array.isArray(profile.career_fields) ? profile.career_fields : [];
   const jobType = toJobType(profileRow.job_type);
 
   const { data: existing } = await supabase
     .from("job_recommendations")
-    .select("generated_at, job_type, searches")
+    .select("generated_at, job_type, career_fields, searches")
     .eq("user_id", userId)
     .maybeSingle();
   if (existing) {
-    // A new job type or edited searches is a new question, so it gets the short cooldown.
-    const repeat = existing.job_type === jobType && (!customSearches || sameSearches(customSearches, existing.searches as Search[]));
+    // A new job type, new fields or edited searches is a new question, so it gets the short cooldown.
+    const sameFields = [...(existing.career_fields ?? [])].sort().join() === [...profile.career_fields].sort().join();
+    const repeat = existing.job_type === jobType && sameFields && (!customSearches || sameSearches(customSearches, existing.searches as Search[]));
     const cooldown = repeat ? REFRESH_COOLDOWN_MINUTES : CHANGED_COOLDOWN_MINUTES;
     const minutesAgo = (Date.now() - new Date(existing.generated_at as string).getTime()) / 60_000;
     if (minutesAgo < cooldown) {
@@ -404,7 +429,7 @@ async function recommend(
       throw new HttpError(
         429,
         repeat
-          ? `These searches were just run, so results won't have changed yet. Refresh again in ${wait} minute${wait === 1 ? "" : "s"}, or change the job type or searches to look for something different now.`
+          ? `These searches were just run, so results won't have changed yet. Refresh again in ${wait} minute${wait === 1 ? "" : "s"}, or change the job type, fields or searches to look for something different now.`
           : `Recommendations were just updated. Try again in ${wait} minute${wait === 1 ? "" : "s"}.`,
       );
     }
@@ -489,7 +514,7 @@ async function recommend(
   const { data: saved, error: saveError } = await supabase
     .from("job_recommendations")
     .upsert(
-      { user_id: userId, jobs, searches, job_type: jobType, generated_at: new Date().toISOString() },
+      { user_id: userId, jobs, searches, job_type: jobType, career_fields: profile.career_fields, generated_at: new Date().toISOString() },
       { onConflict: "user_id" },
     )
     .select()

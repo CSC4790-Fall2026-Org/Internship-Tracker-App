@@ -54,6 +54,27 @@ export const CAREER_STAGES: { value: JobType; label: string; hint: string }[] = 
   { value: "auto", label: "Not sure yet", hint: "We'll go by your graduation date" },
 ];
 
+export type CareerField = "software" | "engineering" | "data" | "healthcare" | "finance" | "business" | "marketing" | "design" | "science" | "education" | "government" | "law" | "media";
+
+/** What kind of work someone does. Same codes as the check constraint on resume_profiles.career_fields. */
+export const CAREER_FIELDS: { value: CareerField; label: string }[] = [
+  { value: "software", label: "Software & IT" },
+  { value: "engineering", label: "Engineering" },
+  { value: "data", label: "Data & analytics" },
+  { value: "healthcare", label: "Healthcare" },
+  { value: "finance", label: "Finance & accounting" },
+  { value: "business", label: "Business & consulting" },
+  { value: "marketing", label: "Marketing & sales" },
+  { value: "design", label: "Design & creative" },
+  { value: "science", label: "Science & research" },
+  { value: "education", label: "Education" },
+  { value: "government", label: "Government & nonprofit" },
+  { value: "law", label: "Law & policy" },
+  { value: "media", label: "Media & communications" },
+];
+
+export const MAX_CAREER_FIELDS = 3;
+
 export interface JobSearch {
   what: string;
   where: string;
