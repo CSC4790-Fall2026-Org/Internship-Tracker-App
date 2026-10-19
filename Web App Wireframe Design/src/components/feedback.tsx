@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Button, cx } from "./ui";
+import { Button, cx, PresenceRow } from "./ui";
+import { usePresence } from "../lib/motion";
 import { Modal } from "./overlay";
 import { IconAlertCircle, IconCheckCircle, IconInfo, IconX } from "./icons";
 
@@ -36,6 +37,8 @@ export function FeedbackProvider({ children }: { children: ReactNode }) {
   const nextId = useRef(1);
 
   const dismiss = useCallback((id: number) => setToasts((ts) => ts.filter((t) => t.id !== id)), []);
+  // Dismissed toasts collapse out so the ones below glide into place instead of jumping.
+  const toastRows = usePresence(toasts, (t) => String(t.id));
 
   const value = useMemo<FeedbackValue>(
     () => ({
@@ -74,9 +77,12 @@ export function FeedbackProvider({ children }: { children: ReactNode }) {
         </Modal>
       )}
       {createPortal(
-        <div aria-live="polite" className="pointer-events-none fixed inset-x-0 bottom-0 z-[300] flex flex-col items-center gap-2 p-4 sm:items-end sm:p-6">
-          {toasts.map((t) => (
-            <ToastItem key={t.id} toast={t} onDismiss={() => dismiss(t.id)} />
+        <div aria-live="polite" className="pointer-events-none fixed inset-x-0 bottom-0 z-[300] flex flex-col items-center p-4 pt-0 sm:items-end sm:p-6 sm:pt-0">
+          {toastRows.map(({ key, item: t, state }) => (
+            // The gap lives inside the row (pt-2) so it collapses along with the toast.
+            <PresenceRow key={key} as="div" state={state} outerClassName="w-full max-w-sm" className="pt-2">
+              <ToastItem toast={t} onDismiss={() => dismiss(t.id)} />
+            </PresenceRow>
           ))}
         </div>,
         document.body,

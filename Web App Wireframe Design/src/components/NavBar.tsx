@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useData } from "../data/DataContext";
 import { attentionItems } from "../data/insights";
-import { Avatar, cx, IconButton, Kbd } from "./ui";
+import { Avatar, cx, IconButton, Kbd, Ticker } from "./ui";
 import { Menu, useDialogBehavior } from "./overlay";
 import { useTheme } from "../lib/theme";
 import {
@@ -216,7 +216,7 @@ function SidebarContent({
     return null;
   };
 
-  const railButton = "group relative flex size-9 items-center justify-center rounded-md transition-colors";
+  const railButton = "tactile group relative flex size-9 items-center justify-center rounded-md";
 
   return (
     <div className="flex h-full flex-col">
@@ -259,7 +259,7 @@ function SidebarContent({
           <button
             type="button"
             onClick={onOpenSearch}
-            className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-md border border-line bg-subtle px-2.5 text-ui text-fg-muted transition-colors hover:border-line-strong hover:text-fg"
+            className="tactile-soft flex h-8 min-w-0 flex-1 items-center gap-2 rounded-md border border-line bg-subtle px-2.5 text-ui text-fg-muted hover:border-line-strong hover:text-fg"
           >
             <IconSearch size={15} />
             <span className="flex-1 text-left">Search</span>
@@ -294,12 +294,12 @@ function SidebarContent({
                         </RailTip>
                       </button>
                     ) : (
-                      <button type="button" onClick={() => onNavigate(item.id)} aria-current={active ? "page" : undefined} className={cx("group flex h-8 w-full items-center gap-2.5 rounded-md px-2 text-ui transition-colors", tone)}>
+                      <button type="button" onClick={() => onNavigate(item.id)} aria-current={active ? "page" : undefined} className={cx("tactile-soft group flex h-8 w-full items-center gap-2.5 rounded-md px-2 text-ui", tone)}>
                         <item.icon size={16} className={active ? "text-accent" : "text-fg-muted group-hover:text-fg-2"} />
                         <span className="flex-1 text-left">{item.label}</span>
                         {badge && (
                           <span title={badge.title} className={cx("min-w-5 rounded-full px-1.5 text-center text-2xs font-medium tabular-nums", "urgent" in badge && badge.urgent ? "bg-warning-soft text-warning-fg" : "text-fg-muted")}>
-                            {badge.text}
+                            <Ticker value={badge.text} />
                           </span>
                         )}
                       </button>
@@ -329,7 +329,7 @@ function SidebarContent({
                 <RailTip>{userName}</RailTip>
               </button>
             ) : (
-              <button type="button" {...props} className="flex w-full items-center gap-2.5 rounded-md p-1.5 text-left transition-colors hover:bg-muted">
+              <button type="button" {...props} className="tactile-soft flex w-full items-center gap-2.5 rounded-md p-1.5 text-left hover:bg-muted">
                 <Avatar name={userName} size={28} />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-ui font-medium text-fg">{userName}</span>

@@ -153,9 +153,13 @@ export function Menu({ trigger, items, align = "end", placement = "bottom" }: { 
     };
   }, [open, align, placement]);
 
+  // Move focus into the menu once it has rendered (it waits for its position before mounting).
+  useEffect(() => {
+    if (open && pos) menuRef.current?.querySelector<HTMLElement>('[role="menuitem"]:not([disabled])')?.focus();
+  }, [open, !!pos]);
+
   useEffect(() => {
     if (!open) return;
-    menuRef.current?.querySelector<HTMLElement>('[role="menuitem"]:not([disabled])')?.focus();
     const onPointer = (e: PointerEvent) => {
       if (!menuRef.current?.contains(e.target as Node) && !triggerRef.current?.contains(e.target as Node)) setOpen(false);
     };
@@ -192,13 +196,15 @@ export function Menu({ trigger, items, align = "end", placement = "bottom" }: { 
             ref={menuRef}
             role="menu"
             onKeyDown={moveFocus}
-            className="fixed z-[150] min-w-44 rounded-lg border border-line bg-surface p-1 shadow-pop animate-pop-in"
+            className={cx("fixed z-[150] min-w-44 rounded-lg border border-line bg-surface p-1 shadow-pop animate-menu-in", placement === "bottom" ? (align === "end" ? "origin-top-right" : "origin-top-left") : align === "end" ? "origin-bottom-right" : "origin-bottom-left")}
             style={{
               top: placement === "bottom" ? pos.top : undefined,
               bottom: placement === "top" ? window.innerHeight - pos.top : undefined,
               left: align === "start" ? pos.left : undefined,
               right: align === "end" ? window.innerWidth - pos.left : undefined,
               minWidth: Math.max(176, pos.width),
+              // Slide in from the trigger's side: down from a trigger above, up from one below.
+              ["--menu-shift" as string]: placement === "bottom" ? "-4px" : "4px",
             }}
           >
             {items.map((item, i) =>

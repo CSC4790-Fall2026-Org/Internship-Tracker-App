@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Application, AppStatus } from "../data/types";
 import { useData } from "../data/DataContext";
 import { STATUS, STATUS_ORDER } from "../data/status";
 import { pipelineStats } from "../data/insights";
-import { Button, Card, CompanyLogo, cx, DueChip, EmptyState, IconButton, Page, PageHeader, Segmented, StatusDot } from "../components/ui";
+import { Button, Card, CompanyLogo, cx, DueChip, EmptyState, IconButton, Page, PageHeader, Segmented, StatusDot, Ticker } from "../components/ui";
+import { prefersReducedMotion, useFlip } from "../lib/motion";
 import { useFeedback, errorMessage } from "../components/feedback";
 import { IconBoard, IconMapPin, IconPlus, IconTrendingUp } from "../components/icons";
 import SankeyDiagram from "../components/SankeyDiagram";
@@ -29,6 +30,11 @@ export default function Pipeline({ onNavigate }: PipelineProps) {
   const [overColumn, setOverColumn] = useState<AppStatus | null>(null);
   // Set when a card is dropped on Offer. `id` restarts the effect if it happens twice in a row.
   const [celebration, setCelebration] = useState<{ id: number; x: number; y: number } | null>(null);
+  // Cards glide to their new slot whenever the columns change; a dropped card starts from where it was let go.
+  const boardRef = useRef<HTMLDivElement>(null);
+  const dropStart = useRef(new Map<string, { left: number; top: number }>());
+  const grabOffset = useRef({ x: 0, y: 0 });
+  useFlip(boardRef, dropStart);
 
   useEffect(() => {
     if (!celebration) return;
@@ -86,7 +92,7 @@ export default function Pipeline({ onNavigate }: PipelineProps) {
 
       {view === "board" && (
         <div className="-mx-4 overflow-x-auto px-4 pb-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
-          <div className="grid min-w-[1120px] auto-cols-[minmax(0,1fr)] grid-flow-col gap-2.5">
+          <div ref={boardRef} className="grid min-w-[1120px] auto-cols-[minmax(0,1fr)] grid-flow-col gap-2.5">
             {STATUS_ORDER.map((status) => {
               const cards = byStatus[status];
               const dragSource = applications.find((a) => a.id === draggingId);
@@ -111,6 +117,7 @@ export default function Pipeline({ onNavigate }: PipelineProps) {
                     const id = draggingId ?? e.dataTransfer.getData("text/plain");
                     setOverColumn(null);
                     setDraggingId(null);
+                    if (id) dropStart.current.set(id, { left: e.clientX - grabOffset.current.x, top: e.clientY - grabOffset.current.y });
                     if (id) moveTo(id, status, { x: e.clientX, y: e.clientY });
                   }}
                   className={cx(
@@ -122,7 +129,9 @@ export default function Pipeline({ onNavigate }: PipelineProps) {
                   <header className="flex h-9 items-center gap-2 pr-0.5 pl-2">
                     <StatusDot status={status} />
                     <h2 className="text-ui font-semibold text-fg">{STATUS[status].label}</h2>
-                    <span className={cx("min-w-5 rounded-full px-1.5 text-center text-2xs font-semibold tabular-nums", STATUS[status].badge)}>{cards.length}</span>
+                    <span className={cx("min-w-5 rounded-full px-1.5 text-center text-2xs font-semibold", STATUS[status].badge)}>
+                      <Ticker value={cards.length} />
+                    </span>
                     <IconButton icon={IconPlus} size="sm" label={`Add to ${STATUS[status].label}`} onClick={() => onNavigate("add", status)} className="ml-auto" />
                   </header>
                   <div className="flex flex-1 flex-col gap-1.5">
@@ -133,7 +142,10 @@ export default function Pipeline({ onNavigate }: PipelineProps) {
                         edge={STATUS[status].edge}
                         onOpen={() => onNavigate("detail", app.id)}
                         isDragging={draggingId === app.id}
-                        onDragStart={() => setDraggingId(app.id)}
+                        onDragStart={(offset) => {
+                          grabOffset.current = offset;
+                          setDraggingId(app.id);
+                        }}
                         onDragEnd={() => {
                           setDraggingId(null);
                           setOverColumn(null);
@@ -177,17 +189,14 @@ export default function Pipeline({ onNavigate }: PipelineProps) {
           </div>
         ))}
 
+      {/* Respect the OS setting for people who find motion uncomfortable; they still get the message. */}
       {celebration && !prefersReducedMotion() && <Confetti key={celebration.id} x={celebration.x} y={celebration.y} />}
     </Page>
   );
 }
 
-// Respect the OS setting for people who find motion uncomfortable; they still get the message.
-function prefersReducedMotion() {
-  return typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-}
 
-function KanbanCard({ app, edge, onOpen, isDragging, onDragStart, onDragEnd }: { app: Application; edge: string; onOpen: () => void; isDragging: boolean; onDragStart: () => void; onDragEnd: () => void }) {
+function KanbanCard({ app, edge, onOpen, isDragging, onDragStart, onDragEnd }: { app: Application; edge: string; onOpen: () => void; isDragging: boolean; onDragStart: (grabOffset: { x: number; y: number }) => void; onDragEnd: () => void }) {
   const completed = app.interviewStages.filter((s) => s.completed).length;
   const showDeadline = app.deadline && (app.status === "wishlist" || app.status === "applied");
   return (
@@ -195,12 +204,14 @@ function KanbanCard({ app, edge, onOpen, isDragging, onDragStart, onDragEnd }: {
       role="button"
       tabIndex={0}
       draggable
+      data-flip={app.id}
       aria-label={`${app.company}, ${app.position}. Open details`}
       onDragStart={(e) => {
         // Firefox won't start a drag unless some data is set.
         e.dataTransfer.setData("text/plain", app.id);
         e.dataTransfer.effectAllowed = "move";
-        onDragStart();
+        const rect = e.currentTarget.getBoundingClientRect();
+        onDragStart({ x: e.clientX - rect.left, y: e.clientY - rect.top });
       }}
       onDragEnd={onDragEnd}
       onClick={onOpen}
@@ -214,8 +225,9 @@ function KanbanCard({ app, edge, onOpen, isDragging, onDragStart, onDragEnd }: {
       className={cx(
         "group relative cursor-grab overflow-hidden rounded-lg border border-line bg-surface p-3 pl-3.5 shadow-xs before:absolute before:inset-y-0 before:left-0 before:w-[3px]",
         edge,
-        " transition-[box-shadow,border-color,opacity] duration-150 hover:border-line-strong hover:shadow-card-hover active:cursor-grabbing",
-        isDragging && "opacity-40",
+        "lift hover:border-line-strong hover:shadow-card-hover active:cursor-grabbing",
+        // The card left behind becomes a quiet placeholder while its ghost is dragged around.
+        isDragging && "border-dashed border-line-strong opacity-45 shadow-none",
       )}
     >
       <div className="flex items-start gap-2.5">

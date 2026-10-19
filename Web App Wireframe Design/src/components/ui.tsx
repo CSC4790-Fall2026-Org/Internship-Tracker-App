@@ -1,8 +1,9 @@
-import { Children, cloneElement, isValidElement, useEffect, useId, useRef, type ComponentProps, type ReactElement, type ReactNode } from "react";
+import { Children, cloneElement, isValidElement, useEffect, useId, useLayoutEffect, useRef, useState, type ComponentProps, type ReactElement, type ReactNode } from "react";
 import type { AppStatus } from "../data/types";
 import { STATUS, STATUS_ORDER } from "../data/status";
 import { dueTone, formatDate, relativeDay } from "../data/dates";
 import { IconCheck, IconChevronDown, type IconComponent } from "./icons";
+import type { PresenceState } from "../lib/motion";
 
 export function cx(...parts: (string | false | null | undefined)[]) {
   return parts.filter(Boolean).join(" ");
@@ -14,7 +15,7 @@ type ButtonVariant = "primary" | "secondary" | "ghost" | "danger" | "danger-ghos
 type ButtonSize = "sm" | "md" | "lg";
 
 const BUTTON_BASE =
-  "inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md font-medium select-none transition-[background-color,border-color,color,box-shadow,opacity] duration-150 disabled:pointer-events-none disabled:opacity-50";
+  "tactile inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md font-medium select-none disabled:pointer-events-none disabled:opacity-50";
 
 const BUTTON_VARIANT: Record<ButtonVariant, string> = {
   primary: "bg-ink text-on-ink shadow-xs hover:bg-ink-hover",
@@ -59,7 +60,7 @@ export function IconButton({ icon: Icon, label, size = "md", variant = "ghost", 
       aria-label={label}
       title={label}
       className={cx(
-        "inline-flex shrink-0 items-center justify-center rounded-md transition-colors duration-150 disabled:pointer-events-none disabled:opacity-50",
+        "tactile inline-flex shrink-0 items-center justify-center rounded-md disabled:pointer-events-none disabled:opacity-50",
         size === "sm" ? "size-7" : "size-8",
         variant === "ghost" ? "text-fg-muted hover:bg-muted hover:text-fg active:bg-muted-strong" : "border border-line bg-surface text-fg-muted shadow-xs hover:bg-subtle hover:text-fg",
         className,
@@ -170,10 +171,10 @@ export function Checkbox({ indeterminate, className, ...rest }: Omit<ComponentPr
       <input
         ref={ref}
         type="checkbox"
-        className="peer size-4 appearance-none rounded-[4px] border border-line-strong bg-surface shadow-xs transition-colors checked:border-ink checked:bg-ink indeterminate:border-ink indeterminate:bg-ink hover:border-fg-faint focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:opacity-50"
+        className="peer size-4 appearance-none rounded-[4px] border border-line-strong bg-surface shadow-xs transition-colors checked:animate-check-pop checked:border-ink checked:bg-ink indeterminate:border-ink indeterminate:bg-ink hover:border-fg-faint focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:opacity-50"
         {...rest}
       />
-      <IconCheck size={12} strokeWidth={3} className="pointer-events-none absolute inset-0 m-auto text-on-ink opacity-0 peer-checked:opacity-100" />
+      <IconCheck size={12} strokeWidth={3} className="pointer-events-none absolute inset-0 m-auto text-on-ink opacity-0 [stroke-dasharray:24] peer-checked:animate-check-draw peer-checked:opacity-100" />
       <span className="pointer-events-none absolute inset-0 m-auto h-0.5 w-2 rounded bg-on-ink opacity-0 peer-indeterminate:opacity-100" />
     </span>
   );
@@ -228,7 +229,7 @@ export function CardHeader({ title, description, icon: Icon, action, className }
 /** A text link styled for card headers, e.g. "View all". */
 export function LinkButton({ className, children, ...rest }: ComponentProps<"button">) {
   return (
-    <button type="button" className={cx("inline-flex items-center gap-1 rounded text-ui font-medium text-fg-muted transition-colors hover:text-fg", className)} {...rest}>
+    <button type="button" className={cx("group inline-flex items-center gap-1 rounded text-ui font-medium text-fg-muted transition-colors hover:text-fg", className)} {...rest}>
       {children}
     </button>
   );
@@ -371,6 +372,34 @@ export function Avatar({ name, size = 28, className }: { name: string; size?: nu
   );
 }
 
+// ---------- Motion helpers ----------
+
+/** A number (or short label) that settles into place when it changes. Static on first render. */
+export function Ticker({ value, className }: { value: ReactNode; className?: string }) {
+  const seen = useRef(false);
+  useEffect(() => {
+    seen.current = true;
+  });
+  return (
+    <span key={String(value)} className={cx("inline-block tabular-nums", seen.current && "animate-value-in", className)}>
+      {value}
+    </span>
+  );
+}
+
+/**
+ * A list row whose height animates in and out (see usePresence). It only clips while animating,
+ * so focus rings are never cut off, and a leaving row is inert so it can't be clicked or focused.
+ */
+export function PresenceRow({ state, as: Tag = "li", outerClassName, className, children }: { state: PresenceState; as?: "li" | "div"; outerClassName?: string; className?: string; children: ReactNode }) {
+  const exiting = state === "exiting";
+  return (
+    <Tag className={cx("grid grid-cols-[minmax(0,1fr)] grid-rows-[1fr]", state === "entering" && "animate-row-in", exiting && "pointer-events-none animate-row-out", outerClassName)} aria-hidden={exiting || undefined} inert={exiting || undefined}>
+      <div className={cx("min-h-0", state !== "present" && "overflow-hidden", className)}>{children}</div>
+    </Tag>
+  );
+}
+
 // ---------- Feedback & states ----------
 
 const BANNER_TONE = {
@@ -412,8 +441,39 @@ export function Skeleton({ className }: { className?: string }) {
 // ---------- Segmented control & tabs ----------
 
 export function Segmented<T extends string>({ value, onChange, options, label, size = "md" }: { value: T; onChange: (v: T) => void; options: { value: T; label: ReactNode; icon?: IconComponent; title?: string }[]; label: string; size?: "sm" | "md" }) {
+  const ref = useRef<HTMLDivElement>(null);
+  // The selected option's box; the pill slides to it. Null until measured, when the button paints its own background.
+  const [pill, setPill] = useState<{ left: number; width: number } | null>(null);
+  const [sliding, setSliding] = useState(false);
+  const labelKey = options.map((o) => (typeof o.label === "string" ? o.label : o.value)).join("|");
+
+  useLayoutEffect(() => {
+    const root = ref.current;
+    const active = root?.querySelector<HTMLElement>('[aria-pressed="true"]');
+    if (!root || !active) return setPill(null);
+    const measure = () => setPill({ left: active.offsetLeft, width: active.offsetWidth });
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(active);
+    return () => ro.disconnect();
+  }, [value, labelKey]);
+  // Only animate once the first position has painted, so the pill doesn't fly in on mount.
+  useEffect(() => {
+    if (pill && !sliding) requestAnimationFrame(() => setSliding(true));
+  }, [pill, sliding]);
+
   return (
-    <div role="group" aria-label={label} className="inline-flex shrink-0 rounded-lg bg-muted p-0.5">
+    <div ref={ref} role="group" aria-label={label} className="relative inline-flex shrink-0 rounded-lg bg-muted p-0.5">
+      {pill && (
+        <span
+          aria-hidden="true"
+          className={cx(
+            "absolute top-0.5 bottom-0.5 left-0 rounded-md bg-surface shadow-[0_1px_2px_rgb(16_16_20/0.08),0_0_0_1px_rgb(16_16_20/0.04)]",
+            sliding && "transition-[translate,width] duration-[340ms] ease-spring",
+          )}
+          style={{ translate: `${pill.left}px 0`, width: pill.width }}
+        />
+      )}
       {options.map((opt) => {
         const active = opt.value === value;
         return (
@@ -424,13 +484,14 @@ export function Segmented<T extends string>({ value, onChange, options, label, s
             title={opt.title}
             onClick={() => onChange(opt.value)}
             className={cx(
-              "inline-flex items-center gap-1.5 rounded-md font-medium whitespace-nowrap transition-[background-color,color,box-shadow] duration-150",
+              "tactile relative inline-flex items-center gap-1.5 rounded-md font-medium whitespace-nowrap",
               size === "sm" ? "h-6 px-2 text-xs" : "h-7 px-2.5 text-ui",
-              active ? "bg-surface text-fg shadow-[0_1px_2px_rgb(16_16_20/0.08),0_0_0_1px_rgb(16_16_20/0.04)]" : "text-fg-muted hover:text-fg",
+              active ? "text-fg" : "text-fg-muted hover:text-fg",
+              active && !pill && "bg-surface shadow-[0_1px_2px_rgb(16_16_20/0.08),0_0_0_1px_rgb(16_16_20/0.04)]",
             )}
           >
             {opt.icon && <opt.icon size={14} />}
-            {opt.label}
+            <span>{opt.label}</span>
           </button>
         );
       })}

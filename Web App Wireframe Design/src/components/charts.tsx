@@ -1,11 +1,12 @@
 import { useState } from "react";
 import type { Application, AppStatus } from "../data/types";
 import { STATUS, STATUS_ORDER } from "../data/status";
-import { cx, StatusDot } from "./ui";
+import { cx, StatusDot, Ticker } from "./ui";
+import { useEntering, useMountedFrame } from "../lib/motion";
 
 // ---------- Stage breakdown (part-to-whole + one tile per stage) ----------
 
-export function StageBreakdown({ applications, onSelect }: { applications: Application[]; onSelect?: (status: AppStatus) => void }) {
+export function StageBreakdown({ applications, onSelect, growIn = false }: { applications: Application[]; onSelect?: (status: AppStatus) => void; growIn?: boolean }) {
   const [hover, setHover] = useState<AppStatus | null>(null);
   const total = applications.length;
   const rows = STATUS_ORDER.map((s) => ({ status: s, count: applications.filter((a) => a.status === s).length }));
@@ -18,13 +19,13 @@ export function StageBreakdown({ applications, onSelect }: { applications: Appli
       {/* Hovering a segment highlights its tile below, which already shows the count and share. */}
       <div>
         {/* 2px surface gaps separate the stages; the rounded ends belong to the whole bar. */}
-        <div className="flex h-2 gap-[2px] overflow-hidden rounded-[4px]" role="img" aria-label={segments.map((r) => `${STATUS[r.status].label} ${r.count}`).join(", ")}>
+        <div className={cx("flex h-2 origin-left gap-[2px] overflow-hidden rounded-[4px]", growIn && "animate-bar-grow")} role="img" aria-label={segments.map((r) => `${STATUS[r.status].label} ${r.count}`).join(", ")}>
           {segments.map((s) => (
             <div
               key={s.status}
               onPointerEnter={() => setHover(s.status)}
               onPointerLeave={() => setHover(null)}
-              className="h-full transition-opacity duration-150"
+              className="h-full transition-[width,opacity] duration-500 ease-snappy"
               style={{ width: `${s.width}%`, background: STATUS[s.status].mark, opacity: hover && hover !== s.status ? 0.35 : 1 }}
             />
           ))}
@@ -43,7 +44,7 @@ export function StageBreakdown({ applications, onSelect }: { applications: Appli
               onBlur={() => setHover(null)}
               aria-label={`${STATUS[r.status].label}: ${r.count} of ${total}. Show these applications`}
               className={cx(
-                "flex w-full items-center justify-between rounded-lg border px-2.5 py-1.5 text-left sm:flex-col sm:items-start sm:justify-start sm:py-2 transition-[border-color,background-color] enabled:hover:border-line-strong enabled:hover:bg-subtle",
+                "lift flex w-full items-center justify-between rounded-lg border px-2.5 py-1.5 text-left sm:flex-col sm:items-start sm:justify-start sm:py-2 enabled:hover:border-line-strong enabled:hover:bg-subtle",
                 hover === r.status ? "border-line-strong bg-subtle" : "border-line",
               )}
             >
@@ -52,7 +53,7 @@ export function StageBreakdown({ applications, onSelect }: { applications: Appli
                 <span className="truncate text-xs text-fg-muted">{STATUS[r.status].label}</span>
               </span>
               <span className="flex items-baseline gap-1.5 sm:mt-1">
-                <span className={cx("text-lg leading-tight font-semibold tabular-nums", r.count ? "text-fg" : "text-fg-muted")}>{r.count}</span>
+                <Ticker value={r.count} className={cx("text-lg leading-tight font-semibold", r.count ? "text-fg" : "text-fg-muted")} />
                 {r.count > 0 && <span className="text-2xs text-fg-muted tabular-nums">{pct(r.count)}%</span>}
               </span>
             </button>
@@ -71,8 +72,10 @@ const FUNNEL_RAMP = ["var(--color-funnel-1)", "var(--color-funnel-2)", "var(--co
  * Each step is a subset of the one before it, so a step's rate is "of the previous step" and its bar is
  * "of the first step". Rates are only shown when the step before has at least one application.
  */
-export function ConversionSteps({ steps }: { steps: { label: string; value: number }[] }) {
+export function ConversionSteps({ steps, growIn = false }: { steps: { label: string; value: number }[]; growIn?: boolean }) {
   const base = steps[0]?.value ?? 0;
+  const filled = useMountedFrame(growIn);
+  const entering = useEntering(growIn);
   return (
     <ol className="grid grid-cols-2 gap-x-4 gap-y-4 sm:grid-cols-4">
       {steps.map((step, i) => {
@@ -82,7 +85,7 @@ export function ConversionSteps({ steps }: { steps: { label: string; value: numb
           <li key={step.label} className="min-w-0">
             <p className="truncate text-xs text-fg-muted">{step.label}</p>
             <p className="mt-1 flex items-baseline gap-1.5">
-              <span className="text-lg leading-tight font-semibold text-fg tabular-nums">{step.value}</span>
+              <Ticker value={step.value} className="text-lg leading-tight font-semibold text-fg" />
               {prev && (
                 <span className="truncate text-2xs text-fg-muted tabular-nums" title={rate === null ? undefined : `${rate}% of ${prev.label.toLowerCase()}`}>
                   {rate === null ? "—" : `${rate}%`}
@@ -91,7 +94,15 @@ export function ConversionSteps({ steps }: { steps: { label: string; value: numb
               )}
             </p>
             <div className="mt-2 h-1.5 rounded-full bg-muted" aria-hidden="true">
-              <div className="h-full rounded-full transition-[width] duration-500" style={{ width: `${base ? (step.value / base) * 100 : 0}%`, minWidth: step.value > 0 ? 6 : 0, background: FUNNEL_RAMP[i] }} />
+              <div
+                className="h-full rounded-full transition-[width] duration-700 ease-snappy"
+                style={{
+                  width: filled ? `${base ? (step.value / base) * 100 : 0}%` : 0,
+                  minWidth: filled && step.value > 0 ? 6 : 0,
+                  background: FUNNEL_RAMP[i],
+                  transitionDelay: entering ? `${200 + i * 70}ms` : undefined,
+                }}
+              />
             </div>
           </li>
         );

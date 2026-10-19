@@ -89,17 +89,41 @@
   --shadow-pop: 0 0 0 1px rgb(16 16 20 / 0.06), 0 10px 28px -8px rgb(16 16 20 / 0.20);
   --shadow-dialog: 0 0 0 1px rgb(16 16 20 / 0.06), 0 28px 70px -16px rgb(16 16 20 / 0.32);
 
-  --animate-fade-in: fade-in 140ms ease-out;
-  --animate-pop-in: pop-in 160ms cubic-bezier(0.2, 0.9, 0.3, 1);
-  --animate-slide-in: slide-in 200ms cubic-bezier(0.2, 0.9, 0.3, 1);
-  --animate-toast-in: toast-in 220ms cubic-bezier(0.2, 0.9, 0.3, 1);
+  /*
+   * Motion. Springs are damped-spring step responses sampled into linear() (see src/lib/motion.ts):
+   * --ease-spring (~1.5% overshoot) for things that travel, --ease-snappy (~0.5%) for presses and bars.
+   * Durations: ~140ms presses and colour, ~220ms overlays and fades, ~340ms travel, ~600ms first-load settle.
+   */
+  --ease-spring: linear(0, 0.0467, 0.1557, 0.2919, 0.4324, 0.5634, 0.6775, 0.772, 0.8469, 0.9039, 0.9455, 0.9746, 0.9938, 1.0056, 1.012, 1.0147, 1.0151, 1.014, 1.0121, 1.01, 1.0079, 1.006, 1.0044, 1.003, 1);
+  --ease-snappy: linear(0, 0.0459, 0.1517, 0.2824, 0.4162, 0.5406, 0.6491, 0.7397, 0.8126, 0.8694, 0.9123, 0.9439, 0.9664, 0.9819, 0.9921, 0.9985, 1.0023, 1.0042, 1.005, 1.0049, 1.0045, 1.0039, 1.0032, 1.0026, 1);
+  --ease-fluid: cubic-bezier(0.2, 0.9, 0.3, 1);
+
+  --animate-fade-in: fade-in 160ms ease-out;
+  --animate-pop-in: pop-in 240ms var(--ease-spring);
+  --animate-menu-in: menu-in 180ms var(--ease-snappy);
+  --animate-slide-in: slide-in 280ms var(--ease-snappy);
+  --animate-toast-in: toast-in 300ms var(--ease-spring);
+  /* Entrance for a screen's major blocks; paired with an inline animation-delay for the stagger. */
+  --animate-rise: rise 420ms var(--ease-spring) backwards;
+  /* A number that just changed settles into place. */
+  --animate-value-in: value-in 260ms var(--ease-snappy);
+  /* List rows grow in, or hold briefly then collapse out. Rows sit in a one-row grid so height can animate. */
+  --animate-row-in: row-in 260ms var(--ease-fluid);
+  --animate-row-out: row-out 240ms var(--ease-fluid) 110ms forwards;
+  --animate-check-pop: check-pop 280ms var(--ease-spring);
+  --animate-check-draw: check-draw 220ms var(--ease-fluid) 40ms backwards;
+  --animate-bar-grow: bar-grow 700ms var(--ease-snappy) 120ms backwards;
 
   @keyframes fade-in {
     from { opacity: 0; }
     to { opacity: 1; }
   }
   @keyframes pop-in {
-    from { opacity: 0; transform: translateY(6px) scale(0.985); }
+    from { opacity: 0; transform: translateY(8px) scale(0.98); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes menu-in {
+    from { opacity: 0; transform: translateY(var(--menu-shift, -4px)) scale(0.97); }
     to { opacity: 1; transform: none; }
   }
   @keyframes slide-in {
@@ -107,8 +131,70 @@
     to { transform: none; }
   }
   @keyframes toast-in {
-    from { opacity: 0; transform: translateY(10px); }
+    from { opacity: 0; transform: translateY(12px) scale(0.97); }
     to { opacity: 1; transform: none; }
+  }
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(8px); }
+  }
+  @keyframes value-in {
+    from { opacity: 0.25; transform: translateY(0.18em); }
+  }
+  @keyframes row-in {
+    from { grid-template-rows: 0fr; opacity: 0; }
+  }
+  @keyframes row-out {
+    to { grid-template-rows: 0fr; opacity: 0; }
+  }
+  @keyframes check-pop {
+    0% { transform: scale(0.8); }
+  }
+  @keyframes check-draw {
+    from { stroke-dashoffset: 24; }
+  }
+  @keyframes bar-grow {
+    from { transform: scaleX(0); }
+  }
+}
+
+/*
+ * Tactile feedback. Colour changes ease out quickly; scale/translate use springs so presses snap in
+ * and release with a little give. `scale` and `translate` are the individual transform properties,
+ * so they never fight a component's own `transform`.
+ */
+@utility tactile {
+  transition-property: color, background-color, border-color, box-shadow, opacity, scale, translate;
+  transition-duration: 140ms, 140ms, 140ms, 140ms, 140ms, 320ms, 320ms;
+  transition-timing-function: ease-out, ease-out, ease-out, ease-out, ease-out, var(--ease-snappy), var(--ease-snappy);
+  &:active:not(:disabled, [aria-disabled='true']) {
+    scale: 0.97;
+    transition-duration: 140ms, 140ms, 140ms, 140ms, 140ms, 70ms, 70ms;
+  }
+}
+/* Gentler press for wide targets (nav rows, list rows), where 3% would visibly shear the text. */
+@utility tactile-soft {
+  transition-property: color, background-color, border-color, box-shadow, opacity, scale;
+  transition-duration: 140ms, 140ms, 140ms, 140ms, 140ms, 320ms;
+  transition-timing-function: ease-out, ease-out, ease-out, ease-out, ease-out, var(--ease-snappy);
+  &:active:not(:disabled, [aria-disabled='true']) {
+    scale: 0.985;
+    transition-duration: 140ms, 140ms, 140ms, 140ms, 140ms, 70ms;
+  }
+}
+/* Clickable cards: rise 1px with their shadow on hover, settle on press. */
+@utility lift {
+  transition-property: border-color, background-color, box-shadow, opacity, scale, translate;
+  transition-duration: 160ms, 160ms, 200ms, 160ms, 320ms, 320ms;
+  transition-timing-function: ease-out, ease-out, ease-out, ease-out, var(--ease-snappy), var(--ease-spring);
+  @media (hover: hover) {
+    &:hover:not(:disabled) {
+      translate: 0 -1px;
+    }
+  }
+  &:active:not(:disabled) {
+    translate: 0 0;
+    scale: 0.99;
+    transition-duration: 160ms, 160ms, 200ms, 160ms, 80ms, 80ms;
   }
 }
 
@@ -268,8 +354,17 @@
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
+    animation-delay: 0s !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+    transition-delay: 0s !important;
     scroll-behavior: auto !important;
+  }
+  /* No movement at all: presses and hovers keep their colour feedback only. */
+  .tactile,
+  .tactile-soft,
+  .lift {
+    scale: none !important;
+    translate: none !important;
   }
 }
