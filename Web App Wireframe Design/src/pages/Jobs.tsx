@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { logoFor, useData } from "../data/DataContext";
 import type { Application } from "../data/types";
-import { fetchResumeProfile, saveJobType, type ResumeProfile } from "../data/resume";
+import { canMatchJobs, fetchOrCreateProfile, hasResume, saveJobType, type ResumeProfile } from "../data/resume";
 import {
   fetchRecommendations,
   formatSalary,
@@ -50,7 +50,7 @@ export default function Jobs({ onNavigate }: { onNavigate: (screen: string, id?:
   const { toast } = useFeedback();
   const [tab, setTabState] = useState<Tab>(lastTab);
 
-  // undefined while loading, null when the user has no resume on file
+  // undefined while loading, null when it couldn't be loaded
   const [profile, setProfile] = useState<ResumeProfile | null | undefined>(undefined);
   const [recs, setRecs] = useState<Recommendations | null>(null);
   const [generating, setGenerating] = useState(false);
@@ -100,12 +100,12 @@ export default function Jobs({ onNavigate }: { onNavigate: (screen: string, id?:
   };
 
   useEffect(() => {
-    Promise.all([fetchResumeProfile(), fetchRecommendations()])
+    Promise.all([fetchOrCreateProfile(), fetchRecommendations()])
       .then(([p, saved]) => {
         setProfile(p);
         setRecs(saved);
-        // First visit with a resume on file: build the first set straight away.
-        if (p && !saved) generate();
+        // First visit: build the first set straight away, from the resume or else the onboarding answers.
+        if (canMatchJobs(p) && !saved) generate();
       })
       .catch((e: Error) => {
         setProfile(null);
@@ -315,13 +315,14 @@ function RecommendedView({
 }) {
   if (profile === undefined) return <JobGridSkeleton />;
 
-  if (!profile) {
+  if (!profile || !canMatchJobs(profile)) {
     return (
       <Card className={cx(RESULTS_MIN_H, "flex flex-col justify-center animate-fade-in")}>
+        {profile === null && error && <Banner icon={IconAlertCircle} className="m-4 mb-0">{error}</Banner>}
         <EmptyState
           icon={IconFile}
-          title="Add your resume to get matches"
-          description="We read your skills, experience and preferred locations, then pick listings that fit and explain why."
+          title="Add your resume or field to get matches"
+          description="Upload your resume, or pick the field you work in on Profile. We'll search current listings and pick the ones that fit."
           actions={
             <Button variant="primary" onClick={() => onNavigate("ai-coach")}>
               Go to Profile
@@ -336,6 +337,20 @@ function RecommendedView({
   const errorBanner = error && (
     <Banner icon={IconAlertCircle} className="mb-4">
       {error}
+    </Banner>
+  );
+  const resumeBanner = !hasResume(profile) && (
+    <Banner
+      tone="info"
+      icon={IconFile}
+      className="mb-4"
+      action={
+        <Button size="sm" onClick={() => onNavigate("ai-coach")}>
+          Add resume
+        </Button>
+      }
+    >
+      Matches are based on what you told us when you signed up. Add your resume to match on your skills and experience too.
     </Banner>
   );
 
@@ -357,10 +372,11 @@ function RecommendedView({
       <>
         {picker}
         {errorBanner}
+        {resumeBanner}
         <Card>
           <EmptyState
             icon={IconSparkles}
-            title="Find jobs that fit your resume"
+            title={hasResume(profile) ? "Find jobs that fit your resume" : "Find jobs that fit you"}
             description="We search current listings based on your profile, then pick the best fits and explain each one."
             actions={
               <Button variant="primary" icon={IconSparkles} onClick={() => onGenerate()}>
@@ -377,6 +393,7 @@ function RecommendedView({
     <>
       {picker}
       {errorBanner}
+      {resumeBanner}
       {/* Keyed so a new set of results resets any unsaved edits to the searches. */}
       <SearchEditor key={recs.generatedAt} saved={recs.searches} generatedAt={recs.generatedAt} onRun={onGenerate} />
 
@@ -454,8 +471,8 @@ function SearchEditor({ saved, generatedAt, onRun }: { saved: SavedSearch[]; gen
           </>
         ) : (
           <>
-            <Button size="sm" icon={IconSparkles} onClick={() => onRun()} title="Replace these with searches the AI picks from your resume">
-              Suggest from resume
+            <Button size="sm" icon={IconSparkles} onClick={() => onRun()} title="Replace these with searches the AI picks from your profile">
+              Suggest searches
             </Button>
             <Button size="sm" icon={IconRefresh} onClick={() => onRun(saved)}>
               Refresh

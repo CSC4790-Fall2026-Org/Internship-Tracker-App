@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { supabase } from "../lib/supabase";
 import type { Json } from "../lib/database.types";
-import { fetchResumeProfile, uploadAndParseResume, type ExperienceItem, type ResumeProfile, type UploadStage } from "../data/resume";
+import { fetchOrCreateProfile, uploadAndParseResume, type ExperienceItem, type ResumeProfile, type UploadStage } from "../data/resume";
 import { CAREER_STAGES, MAX_CAREER_FIELDS, type JobType } from "../data/jobs";
 import CareerFieldPicker from "../components/CareerFieldPicker";
 import { Banner, Button, Card, CardHeader, cx, Field, Input, Page, PageHeader, Select, Skeleton, Spinner, Textarea } from "../components/ui";
@@ -25,7 +25,7 @@ export default function AiCoach({ userId }: { userId: string }) {
   const fileInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    fetchResumeProfile()
+    fetchOrCreateProfile()
       .then((p) => {
         setProfile(p);
         setSavedProfile(p);
@@ -163,10 +163,10 @@ export default function AiCoach({ userId }: { userId: string }) {
                     <span className="mb-3 flex size-9 items-center justify-center rounded-lg border border-line bg-surface text-fg-muted">
                       <IconUpload size={17} />
                     </span>
-                    <p className="text-ui font-medium text-fg">{profile ? "Drop a new version here" : "Drop your resume here"}</p>
+                    <p className="text-ui font-medium text-fg">{profile?.file_name ? "Drop a new version here" : "Drop your resume here"}</p>
                     <p className="mt-0.5 mb-3 text-xs text-fg-muted">PDF, up to 5 MB</p>
                     <Button size="sm" onClick={() => fileInput.current?.click()}>
-                      {profile ? "Replace resume" : "Choose file"}
+                      {profile?.file_name ? "Replace resume" : "Choose file"}
                     </Button>
                   </>
                 )}

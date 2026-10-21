@@ -98,7 +98,7 @@ function SignedIn({ session }: { session: Session }) {
     // Accounts created before this flow existed may already have a resume on file.
     fetchResumeProfile()
       .then(async (profile) => {
-        if (!profile) return setNeedsOnboarding(true);
+        if (!profile?.parsed_at) return setNeedsOnboarding(true);
         await markOnboarded();
         setNeedsOnboarding(false);
       })

@@ -1,6 +1,7 @@
 // Backend for the Jobs page. Two actions:
 //   { action: "search", what, where, page, sort }  - browse Adzuna listings
-//   { action: "recommend", searches? }             - AI-picked listings based on the user's resume profile.
+//   { action: "recommend", searches? }             - AI-picked listings based on the user's profile: the parsed
+//                                                    resume, or until there is one, the onboarding answers.
 //                                                    Without searches the AI plans them from the profile.
 //
 // Secrets (Edge Functions -> Secrets in the dashboard), never in the frontend bundle:
@@ -101,6 +102,7 @@ interface Profile {
   preferred_locations: string[];
   experience: { title?: string; organization?: string; highlight?: string }[];
   career_fields: string[];
+  parsed_at: string | null;
 }
 
 // Same codes as CAREER_FIELDS in the app and the check constraint on resume_profiles.career_fields.
@@ -297,7 +299,8 @@ Rules:
 ${JOB_TYPE_RULE[jobType]}
 - "where" is one US city or state taken from the preferred locations. If there are none, or the preference is remote, use an empty string. For remote, add "remote" to "what" instead.
 - Make the 3 searches different from each other: different roles or different locations, not rewordings.
-- If the profile lists Fields, every search must be a role in one of them, spread across them when there are several. The fields say what kind of work the student wants; don't drift into another field just because a skill would fit there.`;
+- If the profile lists Fields, every search must be a role in one of them, spread across them when there are several. The fields say what kind of work the student wants; don't drift into another field just because a skill would fit there.
+- If the student hasn't uploaded a resume, plan broad, common entry-level roles in their fields and major rather than niche ones.`;
 
 function profileText(profile: Profile) {
   const experience = profile.experience
@@ -305,6 +308,7 @@ function profileText(profile: Profile) {
     .map((e) => `- ${e.title ?? ""} at ${e.organization ?? ""}: ${e.highlight ?? ""}`)
     .join("\n");
   return [
+    `Resume: ${profile.parsed_at ? "uploaded" : "not uploaded yet, so only what the student chose at sign-up is known"}`,
     `Fields: ${fieldsText(profile.career_fields) || "not stated"}`,
     `School: ${profile.school || "unknown"}`,
     `Major: ${profile.major || "unknown"}`,
@@ -358,7 +362,8 @@ Rules:
 - Listing descriptions are short, truncated snippets. Don't claim details the snippet doesn't contain.
 - matched_skills must come from the student's profile, not the listing.
 - Only use ids from the listings provided, copied exactly.
-- If the profile lists Fields, leave out listings outside them.${
+- If the profile lists Fields, leave out listings outside them.
+- If the student hasn't uploaded a resume, there's little to go on: base the reason on their fields, major and what they're looking for, never invent skills or experience, and leave matched_skills empty unless the profile lists skills.${
   jobType === "auto" ? "" : `\n- The student is looking for ${JOB_TYPE_LABEL[jobType]}. Leave out listings of any other kind.`
 }`;
 
@@ -403,15 +408,21 @@ async function recommend(
 ) {
   const { data: profileRow, error: profileError } = await supabase
     .from("resume_profiles")
-    .select("school, major, graduation, summary, skills, interests, preferred_locations, experience, job_type, career_fields")
+    .select("school, major, graduation, summary, skills, interests, preferred_locations, experience, job_type, career_fields, parsed_at")
     .eq("user_id", userId)
     .maybeSingle();
   if (profileError) throw new HttpError(500, `Couldn't read your profile: ${profileError.message}`);
-  if (!profileRow) throw new HttpError(400, "Upload your resume on the Profile page first, so there's something to match against.");
-  const profile = profileRow as unknown as Profile;
-  profile.experience = Array.isArray(profile.experience) ? profile.experience : [];
-  profile.career_fields = Array.isArray(profile.career_fields) ? profile.career_fields : [];
-  const jobType = toJobType(profileRow.job_type);
+  const profile = profileRow as unknown as Profile | null;
+  if (profile) {
+    profile.experience = Array.isArray(profile.experience) ? profile.experience : [];
+    profile.career_fields = Array.isArray(profile.career_fields) ? profile.career_fields : [];
+  }
+  // Without a resume, the fields picked at sign-up (or a major or skills typed on Profile) are enough to go on.
+  // Same check as canMatchJobs in the app.
+  if (!profile || (!profile.parsed_at && profile.career_fields.length === 0 && !profile.major?.trim() && profile.skills.length === 0)) {
+    throw new HttpError(400, "Upload your resume or pick your field on the Profile page first, so there's something to match against.");
+  }
+  const jobType = toJobType(profileRow!.job_type);
 
   const { data: existing } = await supabase
     .from("job_recommendations")
