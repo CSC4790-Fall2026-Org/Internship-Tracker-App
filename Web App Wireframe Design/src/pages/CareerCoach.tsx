@@ -76,7 +76,7 @@ export default function CareerCoach({ onNavigate }: { onNavigate: (screen: strin
   return (
     <Page width="narrow">
       <PageHeader
-        title="Career coach"
+        title="Career Coach"
         description="Advice grounded in your applications, deadlines, contacts and career log."
         actions={
           messages.length > 0 && (

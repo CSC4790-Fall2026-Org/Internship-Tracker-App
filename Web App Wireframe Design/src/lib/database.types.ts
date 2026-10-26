@@ -151,6 +151,27 @@ export type Database = {
           },
         ]
       }
+      calendar_feeds: {
+        Row: {
+          created_at: string
+          timezone: string
+          token: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          timezone?: string
+          token?: string
+          user_id?: string
+        }
+        Update: {
+          created_at?: string
+          timezone?: string
+          token?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       career_log_entries: {
         Row: {
           application_id: string | null

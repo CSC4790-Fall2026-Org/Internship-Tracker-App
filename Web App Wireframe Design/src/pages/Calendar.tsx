@@ -3,10 +3,11 @@ import { useData, type CalendarEventInput } from "../data/DataContext";
 import type { CalendarEvent } from "../data/types";
 import { daysUntil, formatDate, formatTime, isoOf, relativeDay, toDate, todayISO } from "../data/dates";
 import { calendarItems, KIND_META, type CalendarItem, type ItemKind } from "../data/insights";
-import { Button, Card, CardHeader, cx, EmptyState, Field, IconButton, Input, Page, PageHeader, Segmented, Select, Textarea } from "../components/ui";
+import { supabase } from "../lib/supabase";
+import { Banner, Button, buttonClass, Card, CardHeader, cx, EmptyState, Field, IconButton, Input, Page, PageHeader, Segmented, Select, Spinner, Textarea } from "../components/ui";
 import { Modal } from "../components/overlay";
 import { useFeedback, errorMessage } from "../components/feedback";
-import { IconCalendar, IconChevronLeft, IconChevronRight, IconFlag, IconMessage, IconPlus, IconTaskSquare, IconTrash, type IconComponent } from "../components/icons";
+import { IconAlertCircle, IconCalendar, IconChevronLeft, IconChevronRight, IconCopy, IconExternal, IconFlag, IconInfo, IconMessage, IconPlus, IconRefresh, IconTaskSquare, IconTrash, type IconComponent } from "../components/icons";
 
 interface CalendarProps {
   onNavigate: (screen: string, id?: string) => void;
@@ -28,6 +29,7 @@ export default function Calendar({ onNavigate, focusEventId, onFocusHandled }: C
   const [anchor, setAnchor] = useState(today);
   const [selected, setSelected] = useState(today);
   const [editing, setEditing] = useState<CalendarEvent | { date: string } | null>(null);
+  const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
     if (!focusEventId) return;
@@ -109,6 +111,9 @@ export default function Calendar({ onNavigate, focusEventId, onFocusHandled }: C
                 { value: "week", label: "Week" },
               ]}
             />
+            <Button icon={IconRefresh} onClick={() => setSyncing(true)}>
+              Sync to Google
+            </Button>
             <Button variant="primary" icon={IconPlus} onClick={() => setEditing({ date: selected >= today ? selected : today })}>
               Add event
             </Button>
@@ -342,6 +347,7 @@ export default function Calendar({ onNavigate, focusEventId, onFocusHandled }: C
       </div>
 
       {editing && <EventModal event={"id" in editing ? editing : null} defaultDate={editing.date} onClose={() => setEditing(null)} />}
+      {syncing && <SyncModal onClose={() => setSyncing(false)} />}
     </Page>
   );
 }
@@ -363,6 +369,108 @@ function AgendaRow({ item, onOpen, showDate }: { item: CalendarItem; onOpen: () 
         </span>
       </button>
     </li>
+  );
+}
+
+/**
+ * The private feed URL that Google Calendar subscribes to (served by the calendar-feed Edge Function).
+ * One-way: Google shows what's here, and picks up changes on its own schedule.
+ */
+function SyncModal({ onClose }: { onClose: () => void }) {
+  const { toast, confirm } = useFeedback();
+  const [token, setToken] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [resetting, setResetting] = useState(false);
+
+  useEffect(() => {
+    // Event times are stored without a zone, so the feed uses the browser's. Saved on every open in case it changed.
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+    supabase
+      .from("calendar_feeds")
+      .upsert({ timezone }, { onConflict: "user_id" })
+      .select("token")
+      .single()
+      .then(({ data, error }) => (error ? setError(error.message) : setToken(data.token)));
+  }, []);
+
+  const feedUrl = token ? `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/calendar-feed?token=${token}` : "";
+  const googleUrl = `https://calendar.google.com/calendar/r?cid=${encodeURIComponent(feedUrl.replace(/^https?:/, "webcal:"))}`;
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(feedUrl);
+      toast("Link copied");
+    } catch {
+      toast("Couldn't reach the clipboard. Check your browser's permissions and try again.", { tone: "error" });
+    }
+  };
+
+  const reset = async () => {
+    if (!token) return;
+    const ok = await confirm({
+      title: "Reset the calendar link?",
+      message: "The current link stops working right away, so Google Calendar will stop updating until you add the new one.",
+      confirmLabel: "Reset link",
+      tone: "danger",
+    });
+    if (!ok) return;
+    setResetting(true);
+    const { data, error } = await supabase.from("calendar_feeds").update({ token: crypto.randomUUID() }).eq("token", token).select("token").single();
+    setResetting(false);
+    if (error) {
+      toast(`Couldn't reset the link: ${error.message}`, { tone: "error" });
+      return;
+    }
+    setToken(data.token);
+    toast("New link created. Add it to Google Calendar again.");
+  };
+
+  return (
+    <Modal
+      title="Sync to Google Calendar"
+      description="Your deadlines, interviews, tasks and events, in a Google calendar that keeps itself up to date."
+      onClose={onClose}
+      dismissible={!resetting}
+      footer={
+        <>
+          {token && (
+            <Button variant="danger-ghost" icon={IconRefresh} onClick={reset} loading={resetting} className="mr-auto">
+              Reset link
+            </Button>
+          )}
+          <Button onClick={onClose} disabled={resetting}>
+            Done
+          </Button>
+        </>
+      }
+    >
+      {error ? (
+        <Banner icon={IconAlertCircle}>Couldn't set up the calendar link: {error}</Banner>
+      ) : !token ? (
+        <div className="flex justify-center py-8">
+          <Spinner />
+        </div>
+      ) : (
+        <div className="space-y-4">
+          <div>
+            <a href={googleUrl} target="_blank" rel="noopener noreferrer" className={buttonClass("primary", "md")}>
+              <IconExternal size={15} />
+              Open Google Calendar
+            </a>
+            <p className="mt-1.5 text-xs text-fg-muted">Then click Add when Google asks whether to add the calendar.</p>
+          </div>
+          <Field label="Calendar link" hint="Or paste this into Google Calendar under Other calendars → + → From URL. Apple Calendar and Outlook accept it too.">
+            <div className="flex gap-2">
+              <Input readOnly value={feedUrl} onFocus={(e) => e.currentTarget.select()} className="min-w-0 flex-1 font-mono text-xs" />
+              <IconButton icon={IconCopy} variant="secondary" label="Copy link" onClick={copy} />
+            </div>
+          </Field>
+          <Banner tone="info" icon={IconInfo}>
+            Google checks for changes every few hours, so edits can take a while to show up there. Make changes here, not in Google. Anyone with this link can see your calendar; if it gets out, reset it.
+          </Banner>
+        </div>
+      )}
+    </Modal>
   );
 }
 
