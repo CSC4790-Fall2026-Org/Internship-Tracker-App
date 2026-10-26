@@ -42,7 +42,7 @@ const TITLES: Record<Screen, string> = {
   jobs: "Jobs",
   "career-log": "Career log",
   "brag-doc": "Brag doc",
-  coach: "Career coach",
+  coach: "Career Coach",
   "ai-coach": "Profile",
 };
 

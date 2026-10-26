@@ -51,7 +51,7 @@ const PAGES: { label: string; screen: string; hint: string; icon: IconComponent 
   { label: "Networking", screen: "networking", hint: "Contacts and outreach", icon: IconUsers },
   { label: "Career log", screen: "career-log", hint: "Accomplishments, projects, feedback, skills, milestones", icon: IconTrophy },
   { label: "Brag doc", screen: "brag-doc", hint: "Your wins grouped by period, ready to copy", icon: IconFile },
-  { label: "Career coach", screen: "coach", hint: "AI advice grounded in your applications and career log", icon: IconSparkles },
+  { label: "Career Coach", screen: "coach", hint: "AI advice grounded in your applications and career log", icon: IconSparkles },
   { label: "Profile", screen: "ai-coach", hint: "Resume and extracted profile", icon: IconProfile },
 ];
 

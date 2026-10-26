@@ -36,6 +36,15 @@ A **Month/Week** toggle switches between a month grid and a seven-column week vi
 
 Clicking any day opens the new-event form for that date; clicking a deadline or interview jumps to its application. An **Upcoming** panel lists the next eight items from today.
 
+**Sync to Google** gives each user a private calendar link that Google Calendar (or Apple Calendar or Outlook) can subscribe to. The `calendar-feed` Edge Function serves the same four kinds of item as an `.ics` feed, looked up by the random token in `calendar_feeds`. It's one-way and Google refreshes subscribed calendars on its own schedule (usually every few hours), so changes don't appear there instantly. Resetting the link swaps the token, which stops the old URL working. Times are sent in the timezone the browser reported when the user last opened the sync dialog.
+
+Google fetches the feed without a Supabase session, so the function must be deployed without the JWT check:
+
+```bash
+supabase db push
+supabase functions deploy calendar-feed --no-verify-jwt
+```
+
 ### Networking
 
 The **Networking** tab is the contact book: name, company, position, notes, email and phone. Contacts belong to the user, not to a single application, and `application_contacts` links a person to any number of applications — so one recruiter can cover two roles at the same company. Contacts can also be linked (or unlinked) from an application's Contacts tab, which offers existing contacts with same-company colleagues listed first.

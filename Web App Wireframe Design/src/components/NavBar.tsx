@@ -57,7 +57,7 @@ const NAV: { label: string; items: { id: NavId; label: string; icon: IconCompone
       { id: "networking", label: "Networking", icon: IconUsers },
       { id: "career-log", label: "Career log", icon: IconTrophy },
       { id: "brag-doc", label: "Brag doc", icon: IconFile },
-      { id: "coach", label: "Career coach", icon: IconSparkles },
+      { id: "coach", label: "Career Coach", icon: IconSparkles },
       { id: "ai-coach", label: "Profile", icon: IconProfile },
     ],
   },
