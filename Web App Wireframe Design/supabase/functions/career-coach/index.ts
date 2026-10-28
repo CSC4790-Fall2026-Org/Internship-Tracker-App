@@ -6,9 +6,9 @@
 // and of the chat history reaches the model, so a long chat or a large workspace can't blow up the prompt or the bill.
 //
 // Secret (Edge Functions -> Secrets in the dashboard), never in the frontend bundle:
-//   GEMINI_API_KEY - already set for parse-resume and jobs
+//   GROQ_API_KEY, GEMINI_API_KEY - already set for parse-resume and jobs (see _shared/llm.ts)
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { chatCompletion, LLM_KEY_ENV } from "../_shared/llm.ts";
+import { chatCompletion, missingLlmKeyError } from "../_shared/llm.ts";
 
 // Prompt budget. ~4 characters per token, so this keeps a request around 7-8k tokens before the reply.
 const MAX_CONTEXT_CHARS = 14_000;
@@ -16,7 +16,7 @@ const MAX_MESSAGES = 12;
 const MAX_MESSAGE_CHARS = 2_000;
 const MAX_REPLY_TOKENS = 3_000;
 // Edge Functions stop at 150s on the free plan; give up well before that so the user gets a real message.
-// Covers both models when the first one is busy and the request falls back.
+// Covers both providers when the first one is busy and the request falls back.
 const LLM_TIMEOUT_MS = 45_000;
 
 const corsHeaders = {
@@ -76,15 +76,15 @@ function toContext(value: unknown): string {
   return text.length > MAX_CONTEXT_CHARS ? `${text.slice(0, MAX_CONTEXT_CHARS)}\n[...truncated to fit]` : text;
 }
 
-async function askModel(apiKey: string, context: string, messages: ChatMessage[]): Promise<string> {
+async function askModel(context: string, messages: ChatMessage[]): Promise<string> {
   let res: Response;
   try {
     res = await chatCompletion(
-      apiKey,
       {
         temperature: 0.4,
-        max_tokens: MAX_REPLY_TOKENS,
-        // Gemini thinks before answering; low effort keeps a chat reply to a few seconds.
+        max_completion_tokens: MAX_REPLY_TOKENS,
+        // gpt-oss reasons before answering; low effort keeps a chat reply to a few seconds.
+        // (Gemini's own setting in _shared/llm.ts overrides this.)
         reasoning_effort: "low",
         messages: [{ role: "system", content: `${SYSTEM_PROMPT}\n\n<user_data>\n${context}\n</user_data>` }, ...messages],
       },
@@ -120,10 +120,8 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
-    const apiKey = Deno.env.get(LLM_KEY_ENV);
-    if (!apiKey) {
-      return jsonResponse(500, { error: `${LLM_KEY_ENV} is not set. Add it under Edge Functions -> Secrets in the Supabase dashboard.` });
-    }
+    const keyError = missingLlmKeyError();
+    if (keyError) return jsonResponse(500, { error: keyError });
 
     // Signed-in users only, so the AI quota can't be spent by anyone with the URL.
     const supabase = createClient(
@@ -135,7 +133,7 @@ Deno.serve(async (req) => {
     if (authError || !auth.user) return jsonResponse(401, { error: "You need to be signed in." });
 
     const body = await req.json().catch(() => ({}));
-    const reply = await askModel(apiKey, toContext(body.context), toMessages(body.messages));
+    const reply = await askModel(toContext(body.context), toMessages(body.messages));
     return jsonResponse(200, { reply });
   } catch (e) {
     if (e instanceof HttpError) return jsonResponse(e.status, { error: e.message });

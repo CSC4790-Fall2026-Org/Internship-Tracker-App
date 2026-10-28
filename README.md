@@ -51,19 +51,19 @@ The **Networking** tab is the contact book: name, company, position, notes, emai
 
 ### AI resume parsing
 
-The **Profile** tab lets a user upload a resume PDF. The file goes to a private `resumes` storage bucket, and the `parse-resume` Edge Function extracts the text (with `unpdf`) and sends it to Google Gemini, which returns a structured profile saved in `resume_profiles`.
+The **Profile** tab lets a user upload a resume PDF. The file goes to a private `resumes` storage bucket, and the `parse-resume` Edge Function extracts the text (with `unpdf`) and sends it to an AI model, which returns a structured profile saved in `resume_profiles`.
 
-Every function that calls the model goes through `supabase/functions/_shared/llm.ts`, which sends OpenAI-style requests to Gemini's OpenAI-compatible endpoint. `LLM_MODELS` there lists `gemini-3.5-flash` first and `gemini-3.5-flash-lite` as a fallback: when the first model is rate-limited (429) or overloaded (503), the request is retried on the next. Both return schema-valid JSON for the strict schemas in `parse-resume` and `jobs`; if you change the list, check those still work.
+Every function that calls the model goes through `supabase/functions/_shared/llm.ts`. `LLM_TARGETS` there lists the providers in order: Groq (`openai/gpt-oss-120b`, about a second per call) first, then Google Gemini (`gemini-3.5-flash` with thinking off, about 3 seconds). When Groq is rate-limited (429), overloaded (5xx), unreachable, or the prompt is over its free per-minute token cap (413), the request is retried on Gemini. Both return schema-valid JSON for the strict schemas in `parse-resume` and `jobs`; if you change the list, check those still work. Gemini's free tier only allows about 20 requests a day for this model, so it is a backup, not a second full quota.
 
 Because the text is extracted locally, a scanned or image-only PDF produces nothing and the user is told to upload a text-based PDF.
 
-The Gemini API key (from [Google AI Studio](https://aistudio.google.com/apikey)) is a server-side secret and must never be added to `.env.local` — anything with a `VITE_` prefix is bundled into the browser. Set it once per project, either in the dashboard under **Edge Functions → Secrets** or with:
+The API keys ([Groq](https://console.groq.com/keys), [Google AI Studio](https://aistudio.google.com/apikey)) are server-side secrets and must never be added to `.env.local` — anything with a `VITE_` prefix is bundled into the browser. Set them once per project, either in the dashboard under **Edge Functions → Secrets** or with:
 
 ```bash
-supabase secrets set GEMINI_API_KEY=...
+supabase secrets set GROQ_API_KEY=gsk_... GEMINI_API_KEY=...
 ```
 
-The name must be exactly `GEMINI_API_KEY`; it is read as an environment variable, not a label.
+The names must be exactly `GROQ_API_KEY` and `GEMINI_API_KEY`; they are read as environment variables, not labels. A provider whose key isn't set is skipped.
 
 To redeploy the function after editing `supabase/functions/parse-resume/index.ts`:
 
@@ -81,9 +81,9 @@ The **Brag doc** tab is a view over the same table, not separate data: it takes 
 
 The **Career coach** tab is a chat grounded in the user's own data. Each question sends the conversation plus a text summary built in `src/data/coach.ts`: applications and statuses, the dashboard's "needs attention" list, the next three weeks of deadlines, interviews, tasks and events, contacts, and the 25 most recent career log entries. It reuses the same helpers as the dashboard, so the coach and the dashboard agree on what's urgent.
 
-The `career-coach` Edge Function calls Gemini through the shared helper, so the API key never reaches the browser. It only answers signed-in users, caps the prompt (about 14k characters of data and the last 12 messages), times out after 45 seconds, and turns rate limits on both models into a "try again in a minute" message. Chat history lives in React state and resets when you leave the page.
+The `career-coach` Edge Function calls the model through the shared helper, so the API keys never reach the browser. It only answers signed-in users, caps the prompt (about 14k characters of data and the last 12 messages), times out after 45 seconds, and turns rate limits on both providers into a "try again" message. Chat history lives in React state and resets when you leave the page.
 
-It uses the same `GEMINI_API_KEY` secret as `parse-resume`. To deploy it, and the schema change that links log entries to applications:
+It uses the same `GROQ_API_KEY` and `GEMINI_API_KEY` secrets as `parse-resume`. To deploy it, and the schema change that links log entries to applications:
 
 ```bash
 supabase db push

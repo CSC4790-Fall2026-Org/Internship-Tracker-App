@@ -1,15 +1,15 @@
 // Reads a resume PDF the user uploaded to the "resumes" bucket, asks the model to pull out a
 // structured profile, and saves it to resume_profiles.
 //
-// The Gemini key lives here as a secret, never in the frontend bundle:
-//   supabase secrets set GEMINI_API_KEY=...
+// The AI keys live here as secrets, never in the frontend bundle (see _shared/llm.ts):
+//   supabase secrets set GROQ_API_KEY=... GEMINI_API_KEY=...
 //
 // We send the model text, not the PDF, so we extract the text first with unpdf.
 // That means a scanned/image-only resume yields nothing - handled explicitly below.
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { extractText, getDocumentProxy } from "npm:unpdf";
-// Strict structured outputs keep the reply schema-valid. If you change LLM_MODELS, check this schema still works.
-import { chatCompletion, LLM_KEY_ENV } from "../_shared/llm.ts";
+// Strict structured outputs keep the reply schema-valid. If you change LLM_TARGETS, check this schema still works.
+import { chatCompletion, missingLlmKeyError } from "../_shared/llm.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -100,12 +100,8 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
-    const apiKey = Deno.env.get(LLM_KEY_ENV);
-    if (!apiKey) {
-      return jsonResponse(500, {
-        error: `${LLM_KEY_ENV} is not set. Add it under Edge Functions -> Secrets in the Supabase dashboard.`,
-      });
-    }
+    const keyError = missingLlmKeyError();
+    if (keyError) return jsonResponse(500, { error: keyError });
 
     // Act as the calling user so storage and table access stay under row-level security.
     const supabase = createClient(
@@ -136,9 +132,9 @@ Deno.serve(async (req) => {
       });
     }
 
-    const llmResponse = await chatCompletion(apiKey, {
+    const llmResponse = await chatCompletion({
       temperature: 0,
-      max_tokens: 8000,
+      max_completion_tokens: 8000,
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
         { role: "user", content: `Extract this student's profile from their resume:\n\n${resumeText}` },

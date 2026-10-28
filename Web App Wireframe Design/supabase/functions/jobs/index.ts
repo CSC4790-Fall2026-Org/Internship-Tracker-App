@@ -6,7 +6,7 @@
 //
 // Secrets (Edge Functions -> Secrets in the dashboard), never in the frontend bundle:
 //   ADZUNA_APP_ID, ADZUNA_APP_KEY  - from https://developer.adzuna.com
-//   GEMINI_API_KEY                 - already set for parse-resume
+//   GROQ_API_KEY, GEMINI_API_KEY   - already set for parse-resume (see _shared/llm.ts)
 //
 // Job type: "search" takes a jobType in the body; "recommend" reads resume_profiles.job_type.
 //
@@ -14,7 +14,7 @@
 // so recommendations are saved to job_recommendations and refreshes have a cooldown.
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 // Same models as parse-resume, which handle the strict JSON schemas below.
-import { chatCompletion, LLM_KEY_ENV } from "../_shared/llm.ts";
+import { chatCompletion, missingLlmKeyError } from "../_shared/llm.ts";
 
 const ADZUNA_COUNTRY = "us";
 const PAGE_SIZE = 20;
@@ -214,16 +214,10 @@ async function adzunaSearch(
   };
 }
 
-async function llmJson<T>(
-  apiKey: string,
-  name: string,
-  schema: Record<string, unknown>,
-  system: string,
-  user: string,
-): Promise<T> {
-  const res = await chatCompletion(apiKey, {
+async function llmJson<T>(name: string, schema: Record<string, unknown>, system: string, user: string): Promise<T> {
+  const res = await chatCompletion({
     temperature: 0.2,
-    max_tokens: 8000,
+    max_completion_tokens: 8000,
     messages: [
       { role: "system", content: system },
       { role: "user", content: user },
@@ -398,7 +392,6 @@ async function recommend(
   supabase: SupabaseClient,
   userId: string,
   credentials: { appId: string; appKey: string },
-  llmKey: string,
   customSearches: Search[] | null,
 ) {
   const { data: profileRow, error: profileError } = await supabase
@@ -445,7 +438,6 @@ async function recommend(
   if (!searches) {
     const today = new Date().toISOString().slice(0, 10);
     const plan = await llmJson<{ searches: Search[] }>(
-      llmKey,
       "search_plan",
       SEARCH_PLAN_SCHEMA,
       searchPlanPrompt(jobType),
@@ -494,7 +486,6 @@ async function recommend(
       )
       .join("\n");
     const ranked = await llmJson<{ recommendations: Ranked[] }>(
-      llmKey,
       "job_ranking",
       RANKING_SCHEMA,
       rankingPrompt(jobType),
@@ -566,11 +557,9 @@ Deno.serve(async (req) => {
     }
 
     if (body.action === "recommend") {
-      const llmKey = Deno.env.get(LLM_KEY_ENV);
-      if (!llmKey) {
-        return jsonResponse(500, { error: `${LLM_KEY_ENV} is not set. Add it under Edge Functions -> Secrets in the Supabase dashboard.` });
-      }
-      return jsonResponse(200, await recommend(supabase, auth.user.id, credentials, llmKey, toCustomSearches(body.searches)));
+      const keyError = missingLlmKeyError();
+      if (keyError) return jsonResponse(500, { error: keyError });
+      return jsonResponse(200, await recommend(supabase, auth.user.id, credentials, toCustomSearches(body.searches)));
     }
 
     return jsonResponse(400, { error: 'Unknown action. Use "search" or "recommend".' });
