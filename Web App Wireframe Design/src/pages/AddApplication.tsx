@@ -3,10 +3,13 @@ import type { Application, AppStatus } from "../data/types";
 import { useData, type NewApplication } from "../data/DataContext";
 import { STATUS, STATUS_ORDER } from "../data/status";
 import { todayISO } from "../data/dates";
-import { Button, Field, Input, Textarea, StatusDot, cx } from "../components/ui";
+import { Banner, Button, Field, Input, Textarea, StatusDot, cx } from "../components/ui";
 import { Modal } from "../components/overlay";
 import { useFeedback, errorMessage } from "../components/feedback";
-import { IconLink, IconMapPin, IconBanknote } from "../components/icons";
+import { IconLink, IconMapPin, IconBanknote, IconSparkles, IconAlertTriangle, IconInfo } from "../components/icons";
+import ImportPostingPanel from "../components/ImportPostingPanel";
+import type { ExtractResult } from "../data/jobPosting";
+import { appendNotes, conflictingFields, postingToForm, PREFILL_FIELDS, PREFILL_LABEL, type PrefillField } from "../data/jobPostingForm";
 
 interface ApplicationFormProps {
   /** Present when editing; absent when adding. */
@@ -44,8 +47,66 @@ export default function ApplicationFormModal({ application, initialStatus, onClo
   const [touched, setTouched] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Fields last filled by "Import from posting" and not edited since; they're highlighted until the user touches them.
+  const [aiFilled, setAiFilled] = useState<Set<PrefillField>>(new Set());
+  // Imported values for fields the user had already typed into, waiting for them to choose.
+  const [pendingReplace, setPendingReplace] = useState<Partial<Record<PrefillField, string>> | null>(null);
+  const [importNotice, setImportNotice] = useState<string | null>(null);
 
-  const set = <K extends keyof FormState>(field: K, value: FormState[K]) => setForm((f) => ({ ...f, [field]: value }));
+  const set = <K extends keyof FormState>(field: K, value: FormState[K]) => {
+    setForm((f) => ({ ...f, [field]: value }));
+    if (aiFilled.has(field as PrefillField)) {
+      setAiFilled((prev) => {
+        const next = new Set(prev);
+        next.delete(field as PrefillField);
+        return next;
+      });
+    }
+  };
+
+  const fillFields = (values: Partial<Record<PrefillField, string>>) => {
+    setForm((f) => ({ ...f, ...values }));
+    setAiFilled((prev) => new Set([...prev, ...(Object.keys(values) as PrefillField[])]));
+  };
+
+  const onExtracted = ({ posting, truncated }: ExtractResult, input: { text: string; url: string }) => {
+    const { fields, notes } = postingToForm(posting, input);
+    const conflicts = conflictingFields(form, fields);
+    // Fill what's empty (or already matches) now; ask before replacing anything the user typed.
+    const safe = Object.fromEntries(Object.entries(fields).filter(([f]) => !conflicts.includes(f as PrefillField)));
+    fillFields(safe);
+    setForm((f) => ({ ...f, notes: appendNotes(f.notes, notes) }));
+    setPendingReplace(conflicts.length ? Object.fromEntries(conflicts.map((f) => [f, fields[f]!])) : null);
+
+    const filled = Object.keys(safe).length;
+    const found = Object.keys(fields).length;
+    setImportNotice(
+      [
+        found === 0
+          ? "No company, role or other form details were stated in the posting. What was found is in Notes."
+          : `Filled ${filled} field${filled === 1 ? "" : "s"} from the posting. Check the highlighted ones before saving; the full description is in Notes.`,
+        truncated && "The posting was long, so only the first 12,000 characters were read.",
+      ]
+        .filter(Boolean)
+        .join(" "),
+    );
+  };
+
+  const resolveReplace = (replace: boolean) => {
+    if (replace && pendingReplace) fillFields(pendingReplace);
+    setPendingReplace(null);
+  };
+
+  const aiHint = (field: PrefillField, fallback?: string) =>
+    aiFilled.has(field) ? (
+      <span className="inline-flex items-center gap-1 text-accent-fg">
+        <IconSparkles size={12} />
+        AI-filled · double-check
+      </span>
+    ) : (
+      fallback
+    );
+  const aiClass = (field: PrefillField) => (aiFilled.has(field) ? "border-accent/50 bg-accent-soft/40" : undefined);
 
   const errors = {
     company: form.company.trim() ? null : "Enter the company name.",
@@ -108,6 +169,36 @@ export default function ApplicationFormModal({ application, initialStatus, onClo
         </>
       }
     >
+      {/* Outside the form, so Enter and Cmd+Enter in the import panel extract instead of saving. */}
+      {!editing && (
+        <div className="mb-5 space-y-3">
+          <ImportPostingPanel onExtracted={onExtracted} disabled={saving} />
+          {pendingReplace && (
+            <Banner
+              tone="warning"
+              icon={IconAlertTriangle}
+              action={
+                <div className="flex gap-1.5">
+                  <Button size="sm" variant="ghost" onClick={() => resolveReplace(false)}>
+                    Keep mine
+                  </Button>
+                  <Button size="sm" onClick={() => resolveReplace(true)}>
+                    Replace
+                  </Button>
+                </div>
+              }
+            >
+              You already filled in {PREFILL_FIELDS.filter((f) => f in pendingReplace).map((f) => PREFILL_LABEL[f]).join(", ")}. Replace{" "}
+              {Object.keys(pendingReplace).length === 1 ? "it" : "them"} with what the posting says?
+            </Banner>
+          )}
+          {importNotice && (
+            <Banner tone="info" icon={IconInfo} action={<Button size="sm" variant="ghost" onClick={() => setImportNotice(null)}>Dismiss</Button>}>
+              {importNotice}
+            </Banner>
+          )}
+        </div>
+      )}
       <form
         noValidate
         onSubmit={(e) => {
@@ -129,11 +220,11 @@ export default function ApplicationFormModal({ application, initialStatus, onClo
         )}
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Company" required error={touched ? errors.company : null}>
-            <Input data-autofocus value={form.company} onChange={(e) => set("company", e.target.value)} placeholder="e.g. Stripe" autoComplete="organization" />
+          <Field label="Company" required error={touched ? errors.company : null} hint={aiHint("company")}>
+            <Input data-autofocus className={aiClass("company")} value={form.company} onChange={(e) => set("company", e.target.value)} placeholder="e.g. Stripe" autoComplete="organization" />
           </Field>
-          <Field label="Position" required error={touched ? errors.position : null}>
-            <Input value={form.position} onChange={(e) => set("position", e.target.value)} placeholder="e.g. Software Engineer Intern" />
+          <Field label="Position" required error={touched ? errors.position : null} hint={aiHint("position")}>
+            <Input className={aiClass("position")} value={form.position} onChange={(e) => set("position", e.target.value)} placeholder="e.g. Software Engineer Intern" />
           </Field>
         </div>
 
@@ -164,11 +255,11 @@ export default function ApplicationFormModal({ application, initialStatus, onClo
         </fieldset>
 
         <div className={cx("grid gap-4", editing && form.status !== "wishlist" ? "sm:grid-cols-3" : "sm:grid-cols-2")}>
-          <Field label="Job posting" hint="Link to the listing" className={editing && form.status !== "wishlist" ? "sm:col-span-1" : undefined}>
-            <Input icon={IconLink} type="url" inputMode="url" value={form.jobUrl} onChange={(e) => set("jobUrl", e.target.value)} onBlur={(e) => set("jobUrl", normalizeUrl(e.target.value))} placeholder="company.com/careers/…" />
+          <Field label="Job posting" hint={aiHint("jobUrl", "Link to the listing")} className={editing && form.status !== "wishlist" ? "sm:col-span-1" : undefined}>
+            <Input icon={IconLink} className={aiClass("jobUrl")} type="url" inputMode="url" value={form.jobUrl} onChange={(e) => set("jobUrl", e.target.value)} onBlur={(e) => setForm((f) => ({ ...f, jobUrl: normalizeUrl(e.target.value) }))} placeholder="company.com/careers/…" />
           </Field>
-          <Field label="Application deadline" hint="Shown on your dashboard and calendar">
-            <Input type="date" value={form.deadline} onChange={(e) => set("deadline", e.target.value)} />
+          <Field label="Application deadline" hint={aiHint("deadline", "Shown on your dashboard and calendar")}>
+            <Input type="date" className={aiClass("deadline")} value={form.deadline} onChange={(e) => set("deadline", e.target.value)} />
           </Field>
           {editing && form.status !== "wishlist" && (
             <Field label="Applied on">
@@ -178,11 +269,11 @@ export default function ApplicationFormModal({ application, initialStatus, onClo
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Location">
-            <Input icon={IconMapPin} value={form.location} onChange={(e) => set("location", e.target.value)} placeholder="e.g. New York, NY · Hybrid" />
+          <Field label="Location" hint={aiHint("location")}>
+            <Input icon={IconMapPin} className={aiClass("location")} value={form.location} onChange={(e) => set("location", e.target.value)} placeholder="e.g. New York, NY · Hybrid" />
           </Field>
-          <Field label="Compensation">
-            <Input icon={IconBanknote} value={form.salary} onChange={(e) => set("salary", e.target.value)} placeholder="e.g. $45/hr or $120k" />
+          <Field label="Compensation" hint={aiHint("salary")}>
+            <Input icon={IconBanknote} className={aiClass("salary")} value={form.salary} onChange={(e) => set("salary", e.target.value)} placeholder="e.g. $45/hr or $120k" />
           </Field>
         </div>
 
