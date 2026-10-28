@@ -90,4 +90,32 @@ supabase db push
 supabase functions deploy career-coach
 ```
 
-`jobs`, `parse-resume` and `career-coach` all import `_shared/llm.ts`; redeploy all three whenever that file changes.
+`jobs`, `parse-resume`, `career-coach` and `extract-job-posting` all import `_shared/llm.ts`; redeploy all four whenever that file changes.
+
+### Import from posting
+
+The **Add application** form (opened by any **+** / **Add application** button) has an **Import from posting** panel. Paste a job description, optionally with a link, and click **Extract**: the `extract-job-posting` Edge Function asks the model for company, title, location, work mode, employment type, salary, deadline, start date, requirements and a summary, then the form is pre-filled. Nothing is saved until the user clicks **Add application**.
+
+- Pre-filled fields are highlighted with an "AI-filled · double-check" hint, which clears once the field is edited. Fields the posting doesn't state stay empty.
+- If the user already typed into a field the import would change, they're asked to **Replace** or **Keep mine**.
+- The link goes in **Job posting**. Work mode is added to **Location** (e.g. "Philadelphia, PA · Hybrid") and the salary range becomes **Compensation** (e.g. "$40–$45/hr"). Employment type, start date, requirements, the summary and the full pasted description are appended to **Notes**, since `applications` has no columns for them.
+- With only a link, the function fetches the page and strips it to text. LinkedIn, Indeed, Handshake, Glassdoor, ZipRecruiter and Workday block this or need JavaScript, so it says to paste the description instead.
+
+The function requires a signed-in user, rejects empty or very short input, cuts the posting to 12,000 characters, and calls the model through `_shared/llm.ts` in JSON mode at temperature 0. The prompt and the cleanup of the model's answer (`cleanPosting`: unknown keys dropped, wrong types and invalid dates set to null, salary strings parsed) live in `supabase/functions/_shared/jobPosting.ts`; an answer that can't be parsed returns a 422 with a readable message.
+
+It uses the same `GROQ_API_KEY` and `GEMINI_API_KEY` secrets as the other AI functions, so there is nothing new to set. To deploy it:
+
+```bash
+cd "Web App Wireframe Design"
+npx supabase functions deploy extract-job-posting
+```
+
+### Tests
+
+```bash
+cd "Web App Wireframe Design"
+npm test                                 # unit tests: posting cleanup and form mapping
+GROQ_API_KEY=gsk_... npm run test:extract  # live: extracts the sample postings in tests/fixtures/job-postings
+```
+
+`npm run test:extract` calls the AI provider for real (three requests), so it is skipped unless `GROQ_API_KEY` or `GEMINI_API_KEY` is set in your shell. It prints each extraction and checks the facts each sample states plainly, including that an instruction hidden inside a posting is ignored.
