@@ -22,6 +22,7 @@ const MAX_CANDIDATES = 40;
 const MAX_RECOMMENDATIONS = 10;
 const MAX_SEARCHES = 5;
 // Re-running the same searches waits longer than running new ones, since the results barely change.
+// src/data/jobs.ts mirrors these so the Jobs page can count down instead of showing an error.
 const REFRESH_COOLDOWN_MINUTES = 10;
 const CHANGED_COOLDOWN_MINUTES = 1;
 
@@ -424,23 +425,28 @@ async function recommend(
   }
   const jobType = toJobType(profileRow!.job_type);
 
-  const { data: existing } = await supabase
+  // One saved set per job type. The cooldown counts the user's most recent run of any type, so flipping
+  // between types can't spend the shared quota faster than one run a minute.
+  const { data: sets } = await supabase
     .from("job_recommendations")
     .select("generated_at, job_type, career_fields, searches")
-    .eq("user_id", userId)
-    .maybeSingle();
-  if (existing) {
-    // A new job type, new fields or edited searches is a new question, so it gets the short cooldown.
-    const sameFields = [...(existing.career_fields ?? [])].sort().join() === [...profile.career_fields].sort().join();
-    const repeat = existing.job_type === jobType && sameFields && (!customSearches || sameSearches(customSearches, existing.searches as Search[]));
-    const cooldown = repeat ? REFRESH_COOLDOWN_MINUTES : CHANGED_COOLDOWN_MINUTES;
-    const minutesAgo = (Date.now() - new Date(existing.generated_at as string).getTime()) / 60_000;
-    if (minutesAgo < cooldown) {
-      const wait = Math.ceil(cooldown - minutesAgo);
+    .eq("user_id", userId);
+  if (sets && sets.length > 0) {
+    const existing = sets.find((s) => s.job_type === jobType);
+    // New fields or edited searches is a new question, so it gets the short cooldown.
+    const sameFields = !!existing && [...(existing.career_fields ?? [])].sort().join() === [...profile.career_fields].sort().join();
+    const repeat = sameFields && (!customSearches || sameSearches(customSearches, existing!.searches as Search[]));
+    const lastRun = Math.max(...sets.map((s) => new Date(s.generated_at as string).getTime()));
+    const readyAt = Math.max(
+      lastRun + CHANGED_COOLDOWN_MINUTES * 60_000,
+      repeat ? new Date(existing!.generated_at as string).getTime() + REFRESH_COOLDOWN_MINUTES * 60_000 : 0,
+    );
+    if (Date.now() < readyAt) {
+      const wait = Math.ceil((readyAt - Date.now()) / 60_000);
       throw new HttpError(
         429,
         repeat
-          ? `These searches were just run, so results won't have changed yet. Refresh again in ${wait} minute${wait === 1 ? "" : "s"}, or change the job type, fields or searches to look for something different now.`
+          ? `These searches were just run, so results won't have changed yet. Refresh again in ${wait} minute${wait === 1 ? "" : "s"}, or change the fields or searches to look for something different now.`
           : `Recommendations were just updated. Try again in ${wait} minute${wait === 1 ? "" : "s"}.`,
       );
     }
@@ -526,7 +532,7 @@ async function recommend(
     .from("job_recommendations")
     .upsert(
       { user_id: userId, jobs, searches, job_type: jobType, career_fields: profile.career_fields, generated_at: new Date().toISOString() },
-      { onConflict: "user_id" },
+      { onConflict: "user_id,job_type" },
     )
     .select()
     .single();
