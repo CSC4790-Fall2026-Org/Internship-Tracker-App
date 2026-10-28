@@ -51,19 +51,19 @@ The **Networking** tab is the contact book: name, company, position, notes, emai
 
 ### AI resume parsing
 
-The **Profile** tab lets a user upload a resume PDF. The file goes to a private `resumes` storage bucket, and the `parse-resume` Edge Function extracts the text (with `unpdf`) and sends it to Groq, which returns a structured profile saved in `resume_profiles`.
+The **Profile** tab lets a user upload a resume PDF. The file goes to a private `resumes` storage bucket, and the `parse-resume` Edge Function extracts the text (with `unpdf`) and sends it to Google Gemini, which returns a structured profile saved in `resume_profiles`.
 
-The model is `openai/gpt-oss-120b`, set once as `GROQ_MODEL` in `supabase/functions/_shared/groq.ts` and shared by every function that calls Groq. Groq only guarantees schema-valid JSON on the `gpt-oss` models, so changing it may loosen that guarantee.
+Every function that calls the model goes through `supabase/functions/_shared/llm.ts`, which sends OpenAI-style requests to Gemini's OpenAI-compatible endpoint. `LLM_MODELS` there lists `gemini-3.5-flash` first and `gemini-3.5-flash-lite` as a fallback: when the first model is rate-limited (429) or overloaded (503), the request is retried on the next. Both return schema-valid JSON for the strict schemas in `parse-resume` and `jobs`; if you change the list, check those still work.
 
 Because the text is extracted locally, a scanned or image-only PDF produces nothing and the user is told to upload a text-based PDF.
 
-The Groq API key is a server-side secret and must never be added to `.env.local` — anything with a `VITE_` prefix is bundled into the browser. Set it once per project, either in the dashboard under **Edge Functions → Secrets** or with:
+The Gemini API key (from [Google AI Studio](https://aistudio.google.com/apikey)) is a server-side secret and must never be added to `.env.local` — anything with a `VITE_` prefix is bundled into the browser. Set it once per project, either in the dashboard under **Edge Functions → Secrets** or with:
 
 ```bash
-supabase secrets set GROQ_API_KEY=gsk_...
+supabase secrets set GEMINI_API_KEY=...
 ```
 
-The name must be exactly `GROQ_API_KEY`; it is read as an environment variable, not a label.
+The name must be exactly `GEMINI_API_KEY`; it is read as an environment variable, not a label.
 
 To redeploy the function after editing `supabase/functions/parse-resume/index.ts`:
 
@@ -81,13 +81,13 @@ The **Brag doc** tab is a view over the same table, not separate data: it takes 
 
 The **Career coach** tab is a chat grounded in the user's own data. Each question sends the conversation plus a text summary built in `src/data/coach.ts`: applications and statuses, the dashboard's "needs attention" list, the next three weeks of deadlines, interviews, tasks and events, contacts, and the 25 most recent career log entries. It reuses the same helpers as the dashboard, so the coach and the dashboard agree on what's urgent.
 
-The `career-coach` Edge Function calls Groq with the shared model, so the API key never reaches the browser. It only answers signed-in users, caps the prompt (about 14k characters of data and the last 12 messages), times out after 45 seconds, and turns Groq rate limits into a "try again in a minute" message. Chat history lives in React state and resets when you leave the page.
+The `career-coach` Edge Function calls Gemini through the shared helper, so the API key never reaches the browser. It only answers signed-in users, caps the prompt (about 14k characters of data and the last 12 messages), times out after 45 seconds, and turns rate limits on both models into a "try again in a minute" message. Chat history lives in React state and resets when you leave the page.
 
-It uses the same `GROQ_API_KEY` secret as `parse-resume`. To deploy it, and the schema change that links log entries to applications:
+It uses the same `GEMINI_API_KEY` secret as `parse-resume`. To deploy it, and the schema change that links log entries to applications:
 
 ```bash
 supabase db push
 supabase functions deploy career-coach
 ```
 
-`jobs` and `parse-resume` now import the model from `_shared/groq.ts`; redeploy them whenever that file changes.
+`jobs`, `parse-resume` and `career-coach` all import `_shared/llm.ts`; redeploy all three whenever that file changes.

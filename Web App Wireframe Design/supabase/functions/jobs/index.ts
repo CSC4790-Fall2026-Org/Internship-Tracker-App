@@ -6,15 +6,15 @@
 //
 // Secrets (Edge Functions -> Secrets in the dashboard), never in the frontend bundle:
 //   ADZUNA_APP_ID, ADZUNA_APP_KEY  - from https://developer.adzuna.com
-//   GROQ_API_KEY                   - already set for parse-resume
+//   GEMINI_API_KEY                 - already set for parse-resume
 //
 // Job type: "search" takes a jobType in the body; "recommend" reads resume_profiles.job_type.
 //
 // Every user of the app shares one Adzuna quota (free tier: 25/min, 250/day, 2,500/month),
 // so recommendations are saved to job_recommendations and refreshes have a cooldown.
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
-// Same model as parse-resume: strict JSON schemas on Groq only work on the gpt-oss models.
-import { GROQ_CHAT_URL, GROQ_MODEL } from "../_shared/groq.ts";
+// Same models as parse-resume, which handle the strict JSON schemas below.
+import { chatCompletion, LLM_KEY_ENV } from "../_shared/llm.ts";
 
 const ADZUNA_COUNTRY = "us";
 const PAGE_SIZE = 20;
@@ -214,37 +214,32 @@ async function adzunaSearch(
   };
 }
 
-async function groqJson<T>(
+async function llmJson<T>(
   apiKey: string,
   name: string,
   schema: Record<string, unknown>,
   system: string,
   user: string,
 ): Promise<T> {
-  const res = await fetch(GROQ_CHAT_URL, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: GROQ_MODEL,
-      temperature: 0.2,
-      max_completion_tokens: 8000,
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: user },
-      ],
-      response_format: { type: "json_schema", json_schema: { name, strict: true, schema } },
-    }),
+  const res = await chatCompletion(apiKey, {
+    temperature: 0.2,
+    max_tokens: 8000,
+    messages: [
+      { role: "system", content: system },
+      { role: "user", content: user },
+    ],
+    response_format: { type: "json_schema", json_schema: { name, strict: true, schema } },
   });
   if (!res.ok) {
-    throw new HttpError(502, `Groq request failed (${res.status}): ${(await res.text()).slice(0, 300)}`);
+    throw new HttpError(502, `AI request failed (${res.status}): ${(await res.text()).slice(0, 300)}`);
   }
   const completion = await res.json();
   const content = completion.choices?.[0]?.message?.content;
-  if (typeof content !== "string") throw new HttpError(502, "Groq returned an unexpected response shape.");
+  if (typeof content !== "string") throw new HttpError(502, "The AI returned an unexpected response shape.");
   try {
     return JSON.parse(content) as T;
   } catch {
-    throw new HttpError(502, "Groq returned a response that wasn't valid JSON.");
+    throw new HttpError(502, "The AI returned a response that wasn't valid JSON.");
   }
 }
 
@@ -403,7 +398,7 @@ async function recommend(
   supabase: SupabaseClient,
   userId: string,
   credentials: { appId: string; appKey: string },
-  groqKey: string,
+  llmKey: string,
   customSearches: Search[] | null,
 ) {
   const { data: profileRow, error: profileError } = await supabase
@@ -449,8 +444,8 @@ async function recommend(
   let searches = customSearches;
   if (!searches) {
     const today = new Date().toISOString().slice(0, 10);
-    const plan = await groqJson<{ searches: Search[] }>(
-      groqKey,
+    const plan = await llmJson<{ searches: Search[] }>(
+      llmKey,
       "search_plan",
       SEARCH_PLAN_SCHEMA,
       searchPlanPrompt(jobType),
@@ -498,8 +493,8 @@ async function recommend(
         }),
       )
       .join("\n");
-    const ranked = await groqJson<{ recommendations: Ranked[] }>(
-      groqKey,
+    const ranked = await llmJson<{ recommendations: Ranked[] }>(
+      llmKey,
       "job_ranking",
       RANKING_SCHEMA,
       rankingPrompt(jobType),
@@ -571,11 +566,11 @@ Deno.serve(async (req) => {
     }
 
     if (body.action === "recommend") {
-      const groqKey = Deno.env.get("GROQ_API_KEY");
-      if (!groqKey) {
-        return jsonResponse(500, { error: "GROQ_API_KEY is not set. Add it under Edge Functions -> Secrets in the Supabase dashboard." });
+      const llmKey = Deno.env.get(LLM_KEY_ENV);
+      if (!llmKey) {
+        return jsonResponse(500, { error: `${LLM_KEY_ENV} is not set. Add it under Edge Functions -> Secrets in the Supabase dashboard.` });
       }
-      return jsonResponse(200, await recommend(supabase, auth.user.id, credentials, groqKey, toCustomSearches(body.searches)));
+      return jsonResponse(200, await recommend(supabase, auth.user.id, credentials, llmKey, toCustomSearches(body.searches)));
     }
 
     return jsonResponse(400, { error: 'Unknown action. Use "search" or "recommend".' });

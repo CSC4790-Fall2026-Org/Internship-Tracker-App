@@ -102,7 +102,7 @@ export function searchJobs(search: JobSearch, page: number) {
   return invokeJobs<{ jobs: JobListing[]; total: number }>({ action: "search", ...search, page });
 }
 
-/** The saved set, without calling Adzuna or Groq. */
+/** The saved set, without calling Adzuna or the AI. */
 export async function fetchRecommendations(): Promise<Recommendations | null> {
   const { data, error } = await supabase.from("job_recommendations").select("jobs, searches, job_type, generated_at").maybeSingle();
   if (error) throw new Error(error.message);
