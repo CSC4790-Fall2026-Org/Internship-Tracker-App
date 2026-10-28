@@ -1,16 +1,15 @@
-// Reads a resume PDF the user uploaded to the "resumes" bucket, asks Groq to pull out a
+// Reads a resume PDF the user uploaded to the "resumes" bucket, asks the model to pull out a
 // structured profile, and saves it to resume_profiles.
 //
-// The Groq key lives here as a secret, never in the frontend bundle:
-//   supabase secrets set GROQ_API_KEY=gsk_...
+// The AI keys live here as secrets, never in the frontend bundle (see _shared/llm.ts):
+//   supabase secrets set GROQ_API_KEY=... GEMINI_API_KEY=...
 //
-// Groq's chat endpoint takes text, not PDFs, so we extract the text first with unpdf.
+// We send the model text, not the PDF, so we extract the text first with unpdf.
 // That means a scanned/image-only resume yields nothing - handled explicitly below.
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { extractText, getDocumentProxy } from "npm:unpdf";
-// Strict structured outputs on Groq are limited to the gpt-oss models; on others the
-// schema is best-effort. Change GROQ_MODEL and you may lose the schema guarantee.
-import { GROQ_CHAT_URL, GROQ_MODEL } from "../_shared/groq.ts";
+// Strict structured outputs keep the reply schema-valid. If you change LLM_TARGETS, check this schema still works.
+import { chatCompletion, missingLlmKeyError } from "../_shared/llm.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -101,12 +100,8 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
-    const apiKey = Deno.env.get("GROQ_API_KEY");
-    if (!apiKey) {
-      return jsonResponse(500, {
-        error: "GROQ_API_KEY is not set. Add it under Edge Functions -> Secrets in the Supabase dashboard.",
-      });
-    }
+    const keyError = missingLlmKeyError();
+    if (keyError) return jsonResponse(500, { error: keyError });
 
     // Act as the calling user so storage and table access stay under row-level security.
     const supabase = createClient(
@@ -137,40 +132,35 @@ Deno.serve(async (req) => {
       });
     }
 
-    const groqResponse = await fetch(GROQ_CHAT_URL, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: GROQ_MODEL,
-        temperature: 0,
-        max_completion_tokens: 8000,
-        messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content: `Extract this student's profile from their resume:\n\n${resumeText}` },
-        ],
-        response_format: {
-          type: "json_schema",
-          json_schema: { name: "resume_profile", strict: true, schema: PROFILE_SCHEMA },
-        },
-      }),
+    const llmResponse = await chatCompletion({
+      temperature: 0,
+      max_completion_tokens: 8000,
+      messages: [
+        { role: "system", content: SYSTEM_PROMPT },
+        { role: "user", content: `Extract this student's profile from their resume:\n\n${resumeText}` },
+      ],
+      response_format: {
+        type: "json_schema",
+        json_schema: { name: "resume_profile", strict: true, schema: PROFILE_SCHEMA },
+      },
     });
 
-    if (!groqResponse.ok) {
-      const detail = await groqResponse.text();
-      return jsonResponse(502, { error: `Groq request failed (${groqResponse.status}): ${detail.slice(0, 400)}` });
+    if (!llmResponse.ok) {
+      const detail = await llmResponse.text();
+      return jsonResponse(502, { error: `AI request failed (${llmResponse.status}): ${detail.slice(0, 400)}` });
     }
 
-    const completion = await groqResponse.json();
+    const completion = await llmResponse.json();
     const content = completion.choices?.[0]?.message?.content;
     if (typeof content !== "string") {
-      return jsonResponse(502, { error: "Groq returned an unexpected response shape." });
+      return jsonResponse(502, { error: "The AI returned an unexpected response shape." });
     }
 
     let profile;
     try {
       profile = JSON.parse(content);
     } catch {
-      return jsonResponse(502, { error: "Groq returned a response that wasn't valid JSON." });
+      return jsonResponse(502, { error: "The AI returned a response that wasn't valid JSON." });
     }
 
     const { data: saved, error: saveError } = await supabase
