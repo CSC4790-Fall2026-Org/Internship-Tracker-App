@@ -1,0 +1,24 @@
+Software Engineering Intern – Summer 2027
+Brightline Analytics
+Philadelphia, PA (Hybrid – 3 days in office)
+
+About the role
+Brightline Analytics builds forecasting tools for regional hospitals. As a Software Engineering Intern on our Platform team, you'll ship features to our React dashboard and the Python services behind it, pair with a mentor every week, and present your project to the company at the end of the summer.
+
+What you'll do
+- Build and test React components for our clinician dashboard
+- Write Python APIs that serve forecasts to the dashboard
+- Add monitoring and alerts for the services you build
+
+What we're looking for
+- Pursuing a BS or MS in Computer Science or a related field, graduating December 2027 or later
+- Experience with Python and JavaScript or TypeScript
+- Familiarity with SQL
+- Comfortable using Git
+
+Details
+Pay: $40–45/hour
+Program dates: June 1, 2027 – August 13, 2027 (11 weeks)
+Application deadline: January 15, 2027. We review applications on a rolling basis, so apply early.
+
+Brightline Analytics is an equal opportunity employer.

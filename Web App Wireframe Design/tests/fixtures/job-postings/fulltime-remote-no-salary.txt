@@ -1,0 +1,20 @@
+Northwind Health is hiring a Data Analyst
+
+Location: Remote (United States)
+Employment type: Full-time
+
+Northwind Health helps clinics understand their patient outcomes. Our analytics team turns messy claims data into dashboards that care teams actually use.
+
+As a Data Analyst you will:
+• Write SQL to clean and join claims and EHR data
+• Build and maintain Tableau dashboards for clinic leadership
+• Partner with product managers to define metrics and run A/B test readouts
+• Document data definitions so everyone works from the same numbers
+
+You might be a fit if you have:
+• A bachelor's degree in statistics, economics, computer science or similar
+• 0–2 years of experience in an analytics role (internships count)
+• Strong SQL; Python or R is a plus
+• Clear written communication
+
+We offer competitive pay, medical/dental/vision coverage, and a home-office stipend.
