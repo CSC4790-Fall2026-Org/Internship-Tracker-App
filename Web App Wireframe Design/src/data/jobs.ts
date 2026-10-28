@@ -29,13 +29,8 @@ export interface Recommendations {
   jobs: JobRecommendation[];
   searches: { what: string; where: string }[];
   jobType: JobType;
-  /** The profile's fields when this set was built. Changing them makes a refresh a new question. */
-  careerFields: string[];
   generatedAt: string;
 }
-
-/** The saved sets, one per job type the user has run. */
-export type RecommendationSets = Partial<Record<JobType, Recommendations>>;
 
 export type JobSort = "relevance" | "date";
 
@@ -87,15 +82,12 @@ export interface JobSearch {
   jobType: JobType;
 }
 
-type RecommendationRow = { jobs: unknown; searches: unknown; job_type: string; career_fields: string[]; generated_at: string };
-
-function toRecommendations(row: RecommendationRow): Recommendations {
+function toRecommendations(row: { jobs: unknown; searches: unknown; job_type: string; generated_at: string }): Recommendations {
   // jsonb columns arrive as Json and need narrowing.
   return {
     jobs: (row.jobs as JobRecommendation[]) ?? [],
     searches: (row.searches as Recommendations["searches"]) ?? [],
     jobType: row.job_type as JobType,
-    careerFields: row.career_fields ?? [],
     generatedAt: row.generated_at,
   };
 }
@@ -110,11 +102,11 @@ export function searchJobs(search: JobSearch, page: number) {
   return invokeJobs<{ jobs: JobListing[]; total: number }>({ action: "search", ...search, page });
 }
 
-/** The saved sets, without calling Adzuna or Groq. */
-export async function fetchRecommendations(): Promise<RecommendationSets> {
-  const { data, error } = await supabase.from("job_recommendations").select("jobs, searches, job_type, career_fields, generated_at");
+/** The saved set, without calling Adzuna or Groq. */
+export async function fetchRecommendations(): Promise<Recommendations | null> {
+  const { data, error } = await supabase.from("job_recommendations").select("jobs, searches, job_type, generated_at").maybeSingle();
   if (error) throw new Error(error.message);
-  return Object.fromEntries(data.map((row) => [row.job_type, toRecommendations(row)]));
+  return data ? toRecommendations(data) : null;
 }
 
 export type SavedSearch = Recommendations["searches"][number];
@@ -127,26 +119,8 @@ export const MAX_SEARCHES = 5;
  * Without `searches`, the AI plans them from the resume profile.
  */
 export async function generateRecommendations(searches?: SavedSearch[]): Promise<Recommendations> {
-  const data = await invokeJobs<{ recommendations: RecommendationRow }>({ action: "recommend", searches });
+  const data = await invokeJobs<{ recommendations: { jobs: unknown; searches: unknown; job_type: string; generated_at: string } }>({ action: "recommend", searches });
   return toRecommendations(data.recommendations);
-}
-
-// Same cooldowns as the "jobs" Edge Function, which enforces them. Every user shares one Adzuna quota.
-const REFRESH_COOLDOWN_MS = 10 * 60_000;
-const CHANGED_COOLDOWN_MS = 60_000;
-
-/**
- * When the server will next accept a run for this job type, as epoch ms. A repeat run (same type, fields
- * and searches, or AI-planned searches) waits longer, since the results barely change.
- */
-export function nextRunAt(sets: RecommendationSets, jobType: JobType, careerFields: string[], repeat: boolean): number {
-  const all = Object.values(sets);
-  if (all.length === 0) return 0;
-  const lastRun = Math.max(...all.map((s) => new Date(s.generatedAt).getTime()));
-  const existing = sets[jobType];
-  const sameFields = !!existing && [...existing.careerFields].sort().join() === [...careerFields].sort().join();
-  const refreshAt = repeat && sameFields ? new Date(existing.generatedAt).getTime() + REFRESH_COOLDOWN_MS : 0;
-  return Math.max(lastRun + CHANGED_COOLDOWN_MS, refreshAt);
 }
 
 function money(n: number) {

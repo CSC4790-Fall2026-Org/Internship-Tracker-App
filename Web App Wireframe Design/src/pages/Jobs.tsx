@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ComponentProps, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { logoFor, useData } from "../data/DataContext";
 import type { Application } from "../data/types";
 import { canMatchJobs, fetchOrCreateProfile, hasResume, saveJobType, type ResumeProfile } from "../data/resume";
@@ -8,7 +8,6 @@ import {
   generateRecommendations,
   JOB_TYPE_LABEL,
   MAX_SEARCHES,
-  nextRunAt,
   roleKey,
   searchJobs,
   type JobListing,
@@ -16,7 +15,6 @@ import {
   type JobSearch,
   type JobType,
   type Recommendations,
-  type RecommendationSets,
   type SavedSearch,
 } from "../data/jobs";
 import { timeAgo } from "../data/dates";
@@ -54,7 +52,7 @@ export default function Jobs({ onNavigate }: { onNavigate: (screen: string, id?:
 
   // undefined while loading, null when it couldn't be loaded
   const [profile, setProfile] = useState<ResumeProfile | null | undefined>(undefined);
-  const [sets, setSets] = useState<RecommendationSets>({});
+  const [recs, setRecs] = useState<Recommendations | null>(null);
   const [generating, setGenerating] = useState(false);
   const [recsError, setRecsError] = useState<string | null>(null);
 
@@ -74,16 +72,11 @@ export default function Jobs({ onNavigate }: { onNavigate: (screen: string, id?:
 
   const trackedByKey = useMemo(() => new Map(applications.map((a) => [roleKey(a.company, a.position), a])), [applications]);
 
-  const recs = (profile && sets[profile.job_type]) ?? null;
-  // When the server will accept the next run, so buttons can count down rather than fail.
-  const runAt = (repeat: boolean) => (profile ? nextRunAt(sets, profile.job_type, profile.career_fields, repeat) : 0);
-
   const generate = async (searches?: SavedSearch[]) => {
     setGenerating(true);
     setRecsError(null);
     try {
-      const next = await generateRecommendations(searches);
-      setSets((prev) => ({ ...prev, [next.jobType]: next }));
+      setRecs(await generateRecommendations(searches));
     } catch (e) {
       setRecsError((e as Error).message);
     } finally {
@@ -92,12 +85,10 @@ export default function Jobs({ onNavigate }: { onNavigate: (screen: string, id?:
   };
 
   // Saved to the profile so recommendations and Browse both start from it next time.
-  // Shows the saved set for that type; only a type with nothing saved yet runs a search, and only once the cooldown allows.
   const changeJobType = async (jobType: JobType) => {
     if (!profile || profile.job_type === jobType) return;
     const previous = profile;
     setProfile({ ...profile, job_type: jobType });
-    setRecsError(null);
     try {
       await saveJobType(profile.id, jobType);
     } catch (e) {
@@ -105,16 +96,16 @@ export default function Jobs({ onNavigate }: { onNavigate: (screen: string, id?:
       setRecsError(`Couldn't save your preference: ${(e as Error).message}`);
       return;
     }
-    if (!sets[jobType] && Date.now() >= nextRunAt(sets, jobType, profile.career_fields, false)) generate();
+    generate();
   };
 
   useEffect(() => {
     Promise.all([fetchOrCreateProfile(), fetchRecommendations()])
       .then(([p, saved]) => {
         setProfile(p);
-        setSets(saved);
+        setRecs(saved);
         // First visit: build the first set straight away, from the resume or else the onboarding answers.
-        if (canMatchJobs(p) && !saved[p.job_type] && Date.now() >= nextRunAt(saved, p.job_type, p.career_fields, false)) generate();
+        if (canMatchJobs(p) && !saved) generate();
       })
       .catch((e: Error) => {
         setProfile(null);
@@ -149,7 +140,7 @@ export default function Jobs({ onNavigate }: { onNavigate: (screen: string, id?:
     const preferred = profile?.preferred_locations.find((l) => !/remote/i.test(l)) ?? "";
     const jobType = profile?.job_type ?? "auto";
     // Reuse a role the AI already planned for this job type, rather than a blank keyword that matches everything.
-    const plannedRole = sets[jobType]?.searches[0]?.what ?? "";
+    const plannedRole = recs && recs.jobType === jobType ? (recs.searches[0]?.what ?? "") : "";
     const what = jobType === "auto" || jobType === "internship" ? plannedRole || "intern" : plannedRole;
     const initial: JobSearch = { what, where: preferred, sort: "relevance", jobType };
     setForm(initial);
@@ -222,7 +213,7 @@ export default function Jobs({ onNavigate }: { onNavigate: (screen: string, id?:
       />
 
       {tab === "recommended" ? (
-        <RecommendedView profile={profile} recs={recs} runAt={runAt} generating={generating} error={recsError} onGenerate={generate} onJobTypeChange={changeJobType} onNavigate={onNavigate} cardProps={cardProps} />
+        <RecommendedView profile={profile} recs={recs} generating={generating} error={recsError} onGenerate={generate} onJobTypeChange={changeJobType} onNavigate={onNavigate} cardProps={cardProps} />
       ) : (
         <div>
           <form
@@ -306,7 +297,6 @@ export default function Jobs({ onNavigate }: { onNavigate: (screen: string, id?:
 function RecommendedView({
   profile,
   recs,
-  runAt,
   generating,
   error,
   onGenerate,
@@ -316,7 +306,6 @@ function RecommendedView({
 }: {
   profile: ResumeProfile | null | undefined;
   recs: Recommendations | null;
-  runAt: (repeat: boolean) => number;
   generating: boolean;
   error: string | null;
   onGenerate: (searches?: SavedSearch[]) => void;
@@ -390,9 +379,9 @@ function RecommendedView({
             title={hasResume(profile) ? "Find jobs that fit your resume" : "Find jobs that fit you"}
             description="We search current listings based on your profile, then pick the best fits and explain each one."
             actions={
-              <RunButton readyAt={runAt(false)} variant="primary" icon={IconSparkles} onClick={() => onGenerate()}>
+              <Button variant="primary" icon={IconSparkles} onClick={() => onGenerate()}>
                 Find my matches
-              </RunButton>
+              </Button>
             }
           />
         </Card>
@@ -406,7 +395,7 @@ function RecommendedView({
       {errorBanner}
       {resumeBanner}
       {/* Keyed so a new set of results resets any unsaved edits to the searches. */}
-      <SearchEditor key={recs.generatedAt} saved={recs.searches} generatedAt={recs.generatedAt} runAt={runAt} onRun={onGenerate} />
+      <SearchEditor key={recs.generatedAt} saved={recs.searches} generatedAt={recs.generatedAt} onRun={onGenerate} />
 
       {recs.jobs.length === 0 ? (
         <Card>
@@ -437,7 +426,7 @@ const sameSearchList = (a: SavedSearch[], b: SavedSearch[]) => a.length === b.le
 
 // The searches behind the current recommendations. Users can remove them or add their own, then re-run;
 // the AI still ranks whatever those searches return against the resume.
-function SearchEditor({ saved, generatedAt, runAt, onRun }: { saved: SavedSearch[]; generatedAt: string; runAt: (repeat: boolean) => number; onRun: (searches?: SavedSearch[]) => void }) {
+function SearchEditor({ saved, generatedAt, onRun }: { saved: SavedSearch[]; generatedAt: string; onRun: (searches?: SavedSearch[]) => void }) {
   const [draft, setDraft] = useState<SavedSearch[]>(saved);
   const [adding, setAdding] = useState(false);
   const [what, setWhat] = useState("");
@@ -476,18 +465,18 @@ function SearchEditor({ saved, generatedAt, runAt, onRun }: { saved: SavedSearch
             <Button size="sm" variant="ghost" icon={IconUndo} onClick={() => setDraft(saved)}>
               Undo
             </Button>
-            <RunButton readyAt={runAt(false)} size="sm" variant="primary" onClick={() => onRun(draft)} disabled={draft.length === 0}>
+            <Button size="sm" variant="primary" onClick={() => onRun(draft)} disabled={draft.length === 0}>
               Search these
-            </RunButton>
+            </Button>
           </>
         ) : (
           <>
-            <RunButton readyAt={runAt(true)} size="sm" icon={IconSparkles} onClick={() => onRun()} title="Replace these with searches the AI picks from your profile">
+            <Button size="sm" icon={IconSparkles} onClick={() => onRun()} title="Replace these with searches the AI picks from your profile">
               Suggest searches
-            </RunButton>
-            <RunButton readyAt={runAt(true)} size="sm" icon={IconRefresh} onClick={() => onRun(saved)}>
+            </Button>
+            <Button size="sm" icon={IconRefresh} onClick={() => onRun(saved)}>
               Refresh
-            </RunButton>
+            </Button>
           </>
         )}
       </div>
@@ -516,36 +505,6 @@ function SearchEditor({ saved, generatedAt, runAt, onRun }: { saved: SavedSearch
         </form>
       )}
     </Card>
-  );
-}
-
-// A button that runs a search against the shared Adzuna quota. Until the cooldown is up it's disabled and counts down.
-function RunButton({ readyAt, children, disabled, title, ...rest }: ComponentProps<typeof Button> & { readyAt: number }) {
-  const [now, setNow] = useState(Date.now);
-  const wait = Math.ceil((readyAt - now) / 1000);
-  useEffect(() => {
-    if (wait <= 0) return;
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, [wait > 0]);
-
-  if (wait <= 0) {
-    return (
-      <Button disabled={disabled} title={title} {...rest}>
-        {children}
-      </Button>
-    );
-  }
-  return (
-    // Disabled buttons ignore the pointer, so the explanation sits on a wrapper.
-    <span title="Searches are spaced out because everyone using Pipeline shares one job listings quota">
-      <Button disabled {...rest}>
-        {children}
-        <span className="tabular-nums">
-          {" "}in {Math.floor(wait / 60)}:{String(wait % 60).padStart(2, "0")}
-        </span>
-      </Button>
-    </span>
   );
 }
 
