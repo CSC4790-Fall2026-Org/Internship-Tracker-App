@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, View } from "react-native";
+import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { Stack, useRouter } from "expo-router";
 import { SymbolView } from "expo-symbols";
 import { useData } from "@shared/data/DataContext";
@@ -10,6 +10,7 @@ import { HeaderButton } from "@/components/header-button";
 import { KIND_ICON, KIND_ORDER } from "@/components/calendar-kinds";
 import { PressableScale } from "@/components/pressable-scale";
 import { useTheme } from "@/theme/use-theme";
+import { HapticPressable } from "@/components/haptic-pressable";
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -150,11 +151,12 @@ export default function CalendarScreen() {
                     const isToday = cell.iso === today;
                     const isSelected = cell.iso === selected;
                     return (
-                      <Pressable
+                      <HapticPressable
                         key={cell.iso}
                         accessibilityRole="button"
                         accessibilityState={{ selected: isSelected }}
                         accessibilityLabel={`${formatDate(cell.iso, { weekday: true, long: true })}${dayItems.length ? `, ${dayItems.length} item${dayItems.length === 1 ? "" : "s"}` : ""}`}
+                        feedback="select"
                         onPress={() => selectDay(cell.iso)}
                         onLongPress={() => addEvent(cell.iso)}
                         style={[styles.cell, !cell.inMonth && { backgroundColor: colors.subtle }]}
@@ -169,7 +171,7 @@ export default function CalendarScreen() {
                             <View key={item.id} style={[styles.dot, { backgroundColor: kindColors[item.kind] }]} />
                           ))}
                         </View>
-                      </Pressable>
+                      </HapticPressable>
                     );
                   })}
                 </View>
@@ -180,8 +182,9 @@ export default function CalendarScreen() {
                   const dayItems = itemsByDate.get(cell.iso) ?? [];
                   const isToday = cell.iso === today;
                   return (
-                    <Pressable
+                    <HapticPressable
                       key={cell.iso}
+                      feedback="select"
                       onPress={() => selectDay(cell.iso)}
                       onLongPress={() => addEvent(cell.iso)}
                       style={[styles.weekRow, i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line }, cell.iso === selected && { backgroundColor: colors.accentSoft }]}
@@ -201,7 +204,7 @@ export default function CalendarScreen() {
                           dayItems.map((item) => <ItemChip key={item.id} item={item} onPress={() => openItem(item)} />)
                         )}
                       </View>
-                    </Pressable>
+                    </HapticPressable>
                   );
                 })}
               </View>

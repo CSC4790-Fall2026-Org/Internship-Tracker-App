@@ -1,7 +1,8 @@
-import { Pressable, StyleSheet } from "react-native";
+import { StyleSheet } from "react-native";
 import { Text } from "@/components/text";
 import { SymbolView, type SFSymbol } from "expo-symbols";
 import { useTheme } from "@/theme/use-theme";
+import { HapticPressable } from "@/components/haptic-pressable";
 
 /**
  * A button for the navigation bar: an SF Symbol (with a label for VoiceOver) or a short text label.
@@ -11,7 +12,7 @@ export function HeaderButton({ icon, label, onPress, bold, disabled, muted }: { 
   const { colors } = useTheme();
   const tint = muted ? colors.fgMuted : colors.accent;
   return (
-    <Pressable
+    <HapticPressable
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityState={{ disabled: !!disabled }}
@@ -21,7 +22,7 @@ export function HeaderButton({ icon, label, onPress, bold, disabled, muted }: { 
       style={({ pressed }) => [styles.button, { opacity: disabled ? 0.4 : pressed ? 0.6 : 1 }]}
     >
       {icon ? <SymbolView name={icon} size={muted ? 18 : 22} tintColor={tint} /> : <Text style={[styles.text, { color: tint, fontWeight: bold ? "600" : "400" }]}>{label}</Text>}
-    </Pressable>
+    </HapticPressable>
   );
 }
 

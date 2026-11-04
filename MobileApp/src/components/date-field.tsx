@@ -1,9 +1,10 @@
-import { Pressable, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { SymbolView, type SFSymbol } from "expo-symbols";
 import { isoOf, toDate, todayISO } from "@shared/data/dates";
 import { AppText } from "@/components/ui";
 import { useTheme } from "@/theme/use-theme";
+import { HapticPressable } from "@/components/haptic-pressable";
 
 /**
  * A date stored as "YYYY-MM-DD", like the website's <input type="date">. Empty shows "Add date"; set shows the
@@ -64,7 +65,7 @@ export function TimeField({ value, onChange, label }: { value: string; onChange:
 function AddButton({ icon, text, label, onPress }: { icon: SFSymbol; text: string; label: string; onPress: () => void }) {
   const { colors } = useTheme();
   return (
-    <Pressable
+    <HapticPressable
       accessibilityRole="button"
       accessibilityLabel={label}
       onPress={onPress}
@@ -72,16 +73,16 @@ function AddButton({ icon, text, label, onPress }: { icon: SFSymbol; text: strin
     >
       <SymbolView name={icon} size={17} tintColor={colors.fgMuted} />
       <AppText variant="muted">{text}</AppText>
-    </Pressable>
+    </HapticPressable>
   );
 }
 
 function ClearButton({ label, onPress }: { label: string; onPress: () => void }) {
   const { colors } = useTheme();
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} hitSlop={10} style={styles.clear}>
+    <HapticPressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} hitSlop={10} style={styles.clear}>
       <SymbolView name="xmark.circle.fill" size={20} tintColor={colors.fgFaint} />
-    </Pressable>
+    </HapticPressable>
   );
 }
 

@@ -32,8 +32,8 @@ MobileApp/
 ├── src/app/             screens (Expo Router: every file is a route)
 │   ├── _layout.tsx      root: checks the session, shows sign-in or the tabs, and provides the shared data
 │   ├── sign-in.tsx, onboarding.tsx, search.tsx
-│   └── (tabs)/          Home (dashboard), Applications (list, [id] detail, form), Calendar (calendar, event, sync), Jobs,
-│                        More (networking, contact, career-log, entry, brag-doc, profile, coach)
+│   └── (tabs)/          Home (dashboard), Applications (list, [id] detail, form), Coach, Calendar (calendar, event, sync),
+│                        More (jobs, networking, contact, career-log, entry, brag-doc, profile)
 ├── src/components/      UI kit (ui.tsx) matching the website's components, plus feedback (toast, alerts, menus)
 ├── src/data/            phone-only data helpers (resume upload, sorting, stage changes)
 ├── src/lib/supabase.ts  the app's Supabase client

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Linking, Pressable, StyleSheet, View } from "react-native";
+import { Linking, StyleSheet, View } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useData, type ContactInput } from "@shared/data/DataContext";
 import { AppText, Banner, Button, Checkbox, CompanyLogo, EmptyState, Field, Input, Screen, StatusDot, Textarea } from "@/components/ui";
@@ -7,6 +7,7 @@ import { HeaderButton } from "@/components/header-button";
 import { confirm, errorMessage, useToast } from "@/components/feedback";
 import { haptic } from "@/lib/haptics";
 import { useTheme } from "@/theme/use-theme";
+import { HapticPressable } from "@/components/haptic-pressable";
 
 const EMPTY: ContactInput = { name: "", role: "", company: "", email: "", phone: "", notes: "" };
 
@@ -140,10 +141,11 @@ export default function ContactForm() {
               {sortedApplications.map((app, i) => {
                 const checked = linkedIds.includes(app.id);
                 return (
-                  <Pressable
+                  <HapticPressable
                     key={app.id}
                     accessibilityRole="checkbox"
                     accessibilityState={{ checked }}
+                    feedback="toggle"
                     accessibilityLabel={`${app.company}, ${app.position}`}
                     onPress={() => toggleLink(app.id)}
                     style={[styles.linkRow, i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line }, checked && { backgroundColor: colors.subtle }]}
@@ -155,7 +157,7 @@ export default function ContactForm() {
                       <AppText variant="muted">{` · ${app.position}`}</AppText>
                     </AppText>
                     <StatusDot status={app.status} />
-                  </Pressable>
+                  </HapticPressable>
                 );
               })}
             </View>

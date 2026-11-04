@@ -45,13 +45,14 @@ export function AppText({ variant = "body", style, ...rest }: TextProps & { vari
 // ---------- Layout ----------
 
 /** A scrolling page on the canvas background, with pull to refresh when `onRefresh` is given. */
-export function Screen({ title, children, refreshing = false, onRefresh }: { title?: string; children: ReactNode; refreshing?: boolean; onRefresh?: () => void }) {
+export function Screen({ title, children, refreshing = false, onRefresh, scrollEnabled = true }: { title?: string; children: ReactNode; refreshing?: boolean; onRefresh?: () => void; scrollEnabled?: boolean }) {
   const { colors } = useTheme();
   return (
     <ScrollView
       style={{ backgroundColor: colors.canvas }}
       contentContainerStyle={styles.screen}
       contentInsetAdjustmentBehavior="automatic"
+      scrollEnabled={scrollEnabled}
       keyboardShouldPersistTaps="handled"
       automaticallyAdjustKeyboardInsets
       refreshControl={onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} /> : undefined}
@@ -228,6 +229,7 @@ export function ChoiceRow({ label, hint, selected, onPress }: { label: string; h
       feel="soft"
       accessibilityRole="radio"
       accessibilityState={{ checked: selected }}
+      feedback="none"
       onPress={() => {
         if (!selected) haptic.select();
         onPress();
@@ -253,10 +255,8 @@ export function Chip({ label, active, disabled, onPress }: { label: string; acti
       accessibilityRole="button"
       accessibilityState={{ selected: active, disabled: !!disabled }}
       disabled={disabled}
-      onPress={() => {
-        haptic.select();
-        onPress();
-      }}
+      feedback="select"
+      onPress={onPress}
       style={[styles.chip, { borderColor: active ? colors.ink : colors.line, backgroundColor: active ? colors.ink : colors.surface, opacity: disabled ? 0.45 : 1 }]}
     >
       {active && <SymbolView name="checkmark" size={12} weight="semibold" tintColor={colors.onInk} />}

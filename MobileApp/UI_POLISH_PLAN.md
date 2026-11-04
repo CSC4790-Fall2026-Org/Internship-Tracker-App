@@ -73,6 +73,7 @@ All of this uses Reanimated, already installed, so it runs on the UI thread and 
 - **Segmented control:** a sliding indicator that springs to the chosen option.
 - **Toast:** springs up from below onto a frosted, tinted surface with the website's deeper shadow.
 - **Haptics** (`src/lib/haptics.ts`): a selection tick for segments, chips and choices; a light tap when checking; success when a form saves, a resume is read, or there's an offer; a warning before any destructive confirm.
+- **Haptics on every press (Nov 4, at the user's request):** every button, row, card and header button now taps back. This goes through `PressableScale` and the new `HapticPressable` (`src/components/haptic-pressable.tsx`), which fire on press rather than on touch-down, so scrolling stays silent. A long press that opens a menu gives a firmer bump. Switching tabs, choosing from a native menu or action sheet, and picking a calendar day, stage or chart week each give a selection tick. Checkbox rows and Show password give a toggle tap.
 - **Not done:** entrances on screens other than the Dashboard, to keep motion where it counts as the website does. The toast's slight scale-up isn't included, because Reanimated's preset can only start from an offset.
 
 **Tested:** a fresh load in the simulator caught the Dashboard mid-entrance (numbers counting, meter filling) and then settled on the right values. Segmented indicators sit correctly on Applications and Calendar, with no runtime warnings. **Not yet tested:** press springs, row animations, the toast and haptics need a finger on a real phone (the simulator can't play haptics), along with Reduce Motion.
@@ -117,7 +118,7 @@ All of this uses Reanimated, already installed, so it runs on the UI thread and 
 ### 5. Signature moments (medium effort)
 - **Dashboard stat tiles** get the website's soft glow: a top-down gradient from each tile's stage tint (`expo-linear-gradient`), plus a press lift.
 - **An offer** gets confetti, a success haptic and the toast, as on the website's Board. Skip the confetti under reduced motion.
-- **Board drag-and-drop:** lift the card with a shadow and slight tilt, auto-scroll between columns, and give a haptic when it crosses into a new column. This is also the open item from DEVELOPMENT_PLAN.md Phase 2.
+- **Board drag-and-drop:** lift the card with a shadow and slight tilt, auto-scroll between columns, and give a haptic when it crosses into a new column. This is also the open item from DEVELOPMENT_PLAN.md Phase 2. **Done (Oct 30).** See DEVELOPMENT_PLAN.md Phase 2; it still needs a hand test on a phone.
 - **Sign-in screen:** bring over the website's dark brand panel (the Pipeline mark, "Your whole job search, organized.", and the four feature lines), with the form below it.
 
 ### 6. Brand assets (small effort, required before TestFlight)

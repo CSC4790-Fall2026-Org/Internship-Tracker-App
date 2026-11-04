@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import type { AppStatus } from "@shared/data/types";
 import { useData, type NewApplication } from "@shared/data/DataContext";
@@ -11,6 +11,7 @@ import { HeaderButton } from "@/components/header-button";
 import { errorMessage, useToast } from "@/components/feedback";
 import { haptic } from "@/lib/haptics";
 import { useTheme } from "@/theme/use-theme";
+import { HapticPressable } from "@/components/haptic-pressable";
 
 type FormState = NewApplication & { appliedDate: string };
 
@@ -133,17 +134,18 @@ export default function ApplicationForm() {
             {STATUS_ORDER.map((s) => {
               const active = form.status === s;
               return (
-                <Pressable
+                <HapticPressable
                   key={s}
                   accessibilityRole="radio"
                   accessibilityState={{ checked: active }}
+                  feedback="select"
                   accessibilityHint={STATUS[s].hint}
                   onPress={() => set("status", s)}
                   style={[styles.stage, { borderColor: active ? colors.fg : colors.line, borderWidth: active ? 2 : 1, backgroundColor: colors.surface }]}
                 >
                   <StatusDot status={s} />
                   <AppText style={active && styles.bold}>{STATUS[s].label}</AppText>
-                </Pressable>
+                </HapticPressable>
               );
             })}
           </View>

@@ -3,6 +3,7 @@
 import { Button as MenuButton, Divider, Host, Menu } from "@expo/ui/swift-ui";
 import { font, labelStyle, tint } from "@expo/ui/swift-ui/modifiers";
 import type { SFSymbol } from "expo-symbols";
+import { haptic } from "@/lib/haptics";
 import { useTheme } from "@/theme/use-theme";
 
 export interface MenuItem {
@@ -21,7 +22,16 @@ function Items({ items }: { items: MenuEntry[] }) {
     item === "divider" ? (
       <Divider key={`divider-${i}`} />
     ) : (
-      <MenuButton key={item.label} label={item.label} systemImage={item.checked ? "checkmark" : item.icon} role={item.destructive ? "destructive" : undefined} onPress={item.onPress} />
+      <MenuButton
+        key={item.label}
+        label={item.label}
+        systemImage={item.checked ? "checkmark" : item.icon}
+        role={item.destructive ? "destructive" : undefined}
+        onPress={() => {
+          haptic.select();
+          item.onPress();
+        }}
+      />
     ),
   );
 }

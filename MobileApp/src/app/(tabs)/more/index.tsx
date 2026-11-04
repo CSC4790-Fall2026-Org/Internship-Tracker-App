@@ -11,10 +11,10 @@ import { useTheme } from "@/theme/use-theme";
 
 // The website's sidebar pages that don't get a tab of their own. `href` is missing until a later phase builds them.
 const SECTIONS: { label: string; description: string; icon: SFSymbol; href?: Href; phase?: number }[] = [
+  { label: "Jobs", description: "Matches from your resume, or browse openings", icon: "briefcase", href: "/more/jobs" },
   { label: "Networking", description: "Recruiters, alumni and people you've met", icon: "person.2", href: "/more/networking" },
   { label: "Career log", description: "Wins, projects, feedback and skills", icon: "trophy", href: "/more/career-log" },
   { label: "Brag doc", description: "Your career log, ready to paste into a review", icon: "doc.text", href: "/more/brag-doc" },
-  { label: "Career Coach", description: "Advice grounded in your own data", icon: "sparkles", href: "/more/coach" },
   { label: "Profile", description: "Your resume and job preferences", icon: "person.crop.circle", href: "/more/profile" },
 ];
 

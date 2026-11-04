@@ -2,7 +2,7 @@ import { Stack } from "expo-router";
 import { useTheme } from "@/theme/use-theme";
 import { GEIST } from "@/components/text";
 
-export default function JobsLayout() {
+export default function CoachLayout() {
   const { colors } = useTheme();
   return (
     <Stack
@@ -14,7 +14,7 @@ export default function JobsLayout() {
         contentStyle: { backgroundColor: colors.canvas },
       }}
     >
-      <Stack.Screen name="index" options={{ title: "Jobs" }} />
+      <Stack.Screen name="index" options={{ title: "Career Coach" }} />
     </Stack>
   );
 }

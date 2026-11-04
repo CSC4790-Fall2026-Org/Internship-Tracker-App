@@ -1,9 +1,10 @@
-import { Pressable, StyleSheet } from "react-native";
+import { StyleSheet } from "react-native";
 import { SymbolView } from "expo-symbols";
 import { useData } from "@shared/data/DataContext";
 import { AppText } from "@/components/ui";
 import { chooseAction } from "@/components/feedback";
 import { useTheme } from "@/theme/use-theme";
+import { HapticPressable } from "@/components/haptic-pressable";
 
 /** "Related application", like the website's <Select>: opens a menu of your applications, with None first. */
 export function ApplicationPicker({ value, onChange, noneLabel = "None" }: { value: string | null; onChange: (id: string | null) => void; noneLabel?: string }) {
@@ -18,7 +19,7 @@ export function ApplicationPicker({ value, onChange, noneLabel = "None" }: { val
     ]);
 
   return (
-    <Pressable
+    <HapticPressable
       accessibilityRole="button"
       accessibilityLabel={`Related application: ${current ? `${current.company}, ${current.position}` : noneLabel}. Change`}
       onPress={pick}
@@ -28,7 +29,7 @@ export function ApplicationPicker({ value, onChange, noneLabel = "None" }: { val
         {current ? `${current.company} · ${current.position}` : noneLabel}
       </AppText>
       <SymbolView name="chevron.up.chevron.down" size={13} tintColor={colors.fgMuted} />
-    </Pressable>
+    </HapticPressable>
   );
 }
 

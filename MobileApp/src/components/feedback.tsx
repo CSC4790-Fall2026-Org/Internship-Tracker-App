@@ -1,7 +1,7 @@
 // Phone versions of the website's components/feedback.tsx: toast() for short confirmations, and confirm() /
 // chooseAction() built on the native alert and action sheet instead of custom dialogs.
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
-import { AccessibilityInfo, ActionSheetIOS, Alert, Platform, Pressable, StyleSheet, View } from "react-native";
+import { AccessibilityInfo, ActionSheetIOS, Alert, Platform, StyleSheet, View } from "react-native";
 import { BlurView } from "expo-blur";
 import Animated, { FadeInDown, FadeOut, ReduceMotion } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -9,6 +9,7 @@ import { Text } from "@/components/text";
 import { haptic } from "@/lib/haptics";
 import { CORNERS, shadow } from "@/theme/tokens";
 import { useTheme } from "@/theme/use-theme";
+import { HapticPressable } from "@/components/haptic-pressable";
 
 type ToastTone = "default" | "error";
 type ToastAction = { label: string; onPress: () => void };
@@ -65,7 +66,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             <View style={[StyleSheet.absoluteFill, { backgroundColor: error ? colors.danger : colors.ink, opacity: error ? 0.94 : 0.86 }]} />
             <Text style={[styles.toastText, { color: textColor }]}>{current.message}</Text>
             {current.action && (
-            <Pressable
+            <HapticPressable
               accessibilityRole="button"
               hitSlop={10}
               onPress={() => {
@@ -74,7 +75,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               }}
             >
               <Text style={[styles.toastAction, { color: textColor }]}>{current.action.label}</Text>
-            </Pressable>
+            </HapticPressable>
             )}
           </View>
         </Animated.View>
@@ -123,7 +124,12 @@ export function chooseAction(title: string | undefined, options: ActionOption[])
         cancelButtonIndex: options.length,
         destructiveButtonIndex: options.flatMap((o, i) => (o.destructive ? [i] : [])),
       },
-      (index) => options[index]?.onPress(),
+      (index) => {
+        const option = options[index];
+        if (!option) return;
+        haptic.select();
+        option.onPress();
+      },
     );
     return;
   }

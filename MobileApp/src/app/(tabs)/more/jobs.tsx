@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { ActivityIndicator, ScrollView, StyleSheet, View } from "react-native";
 import { Stack, useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import { SymbolView } from "expo-symbols";
@@ -25,6 +25,7 @@ import { companyOf, JobCard, type JobCardProps } from "@/components/job-card";
 import { HeaderButton } from "@/components/header-button";
 import { chooseAction, errorMessage, useToast } from "@/components/feedback";
 import { useTheme } from "@/theme/use-theme";
+import { HapticPressable } from "@/components/haptic-pressable";
 
 type Tab = "recommended" | "browse";
 
@@ -35,7 +36,7 @@ interface BrowseState {
   page: number;
 }
 
-// Kept outside the component so leaving the tab and coming back doesn't re-run the search.
+// Kept outside the component so leaving the page and coming back doesn't re-run the search.
 // Every search costs a call against the Adzuna quota that all users share.
 let lastTab: Tab = "recommended";
 let browseCache: BrowseState | null = null;
@@ -405,16 +406,16 @@ function SearchEditor({ saved, generatedAt, onRun }: { saved: SavedSearch[]; gen
               {s.what}
               {s.where ? <AppText variant="small">{` · ${s.where}`}</AppText> : null}
             </AppText>
-            <Pressable accessibilityRole="button" accessibilityLabel={`Remove ${s.what}`} onPress={() => setDraft(draft.filter((_, j) => j !== i))} hitSlop={8}>
+            <HapticPressable accessibilityRole="button" accessibilityLabel={`Remove ${s.what}`} onPress={() => setDraft(draft.filter((_, j) => j !== i))} hitSlop={8}>
               <SymbolView name="xmark" size={10} weight="semibold" tintColor={colors.fgMuted} />
-            </Pressable>
+            </HapticPressable>
           </View>
         ))}
         {!adding && draft.length < MAX_SEARCHES && (
-          <Pressable accessibilityRole="button" onPress={() => setAdding(true)} style={[styles.searchChip, styles.addChip, { borderColor: colors.lineStrong }]}>
+          <HapticPressable accessibilityRole="button" onPress={() => setAdding(true)} style={[styles.searchChip, styles.addChip, { borderColor: colors.lineStrong }]}>
             <SymbolView name="plus" size={11} tintColor={colors.fgMuted} />
             <AppText variant="small">Add search</AppText>
-          </Pressable>
+          </HapticPressable>
         )}
       </View>
       {adding && (
@@ -484,7 +485,7 @@ function JobTypeChips({ value, disabled, onChange }: { value: JobType; disabled:
 function JobTypeField({ value, onChange }: { value: JobType; onChange: (jobType: JobType) => void }) {
   const { colors } = useTheme();
   return (
-    <Pressable
+    <HapticPressable
       accessibilityRole="button"
       accessibilityLabel={`Job type: ${JOB_TYPE_LABEL[value]}. Change`}
       onPress={() => chooseAction("Job type", JOB_TYPES.map((t) => ({ label: JOB_TYPE_LABEL[t], onPress: () => onChange(t) })))}
@@ -492,7 +493,7 @@ function JobTypeField({ value, onChange }: { value: JobType; onChange: (jobType:
     >
       <AppText>{JOB_TYPE_LABEL[value]}</AppText>
       <SymbolView name="chevron.up.chevron.down" size={11} tintColor={colors.fgMuted} />
-    </Pressable>
+    </HapticPressable>
   );
 }
 

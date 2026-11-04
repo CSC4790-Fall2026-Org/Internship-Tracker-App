@@ -1,10 +1,11 @@
 // Swipe actions on list rows, like Mail and Reminders: swipe to reveal buttons, tap one, and the row closes.
 import { useRef, type ReactNode } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import ReanimatedSwipeable, { type SwipeableMethods } from "react-native-gesture-handler/ReanimatedSwipeable";
 import { SymbolView, type SFSymbol } from "expo-symbols";
 import { Text } from "@/components/text";
 import { haptic } from "@/lib/haptics";
+import { HapticPressable } from "@/components/haptic-pressable";
 
 export interface SwipeAction {
   label: string;
@@ -19,7 +20,7 @@ function Actions({ actions, close }: { actions: SwipeAction[]; close: () => void
   return (
     <View style={styles.actions}>
       {actions.map((action) => (
-        <Pressable
+        <HapticPressable
           key={action.label}
           accessibilityRole="button"
           accessibilityLabel={action.label}
@@ -31,7 +32,7 @@ function Actions({ actions, close }: { actions: SwipeAction[]; close: () => void
         >
           <SymbolView name={action.icon} size={18} tintColor="#FFFFFF" />
           <Text style={styles.actionText}>{action.label}</Text>
-        </Pressable>
+        </HapticPressable>
       ))}
     </View>
   );

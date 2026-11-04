@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { ActivityIndicator, Alert, Pressable, StyleSheet, View } from "react-native";
+import { ActivityIndicator, Alert, StyleSheet, View } from "react-native";
 import { Stack } from "expo-router";
 import { usePreventRemove } from "expo-router/react-navigation";
 import { SymbolView } from "expo-symbols";
@@ -15,6 +15,7 @@ import { chooseAction, useToast } from "@/components/feedback";
 import { pickResume, uploadAndParseResume } from "@/data/resume-upload";
 import { haptic } from "@/lib/haptics";
 import { useTheme } from "@/theme/use-theme";
+import { HapticPressable } from "@/components/haptic-pressable";
 
 /** The website's Profile page: the resume behind job matches, and everything read from it, editable. */
 export default function Profile() {
@@ -208,7 +209,7 @@ export default function Profile() {
                 <Input value={profile.graduation} onChangeText={(v) => update("graduation", v)} placeholder="e.g. May 2027" />
               </Field>
               <Field label="Looking for" hint="Decides which listings the Jobs tab finds">
-                <Pressable
+                <HapticPressable
                   accessibilityRole="button"
                   accessibilityLabel={`Looking for: ${lookingFor?.label}. Change`}
                   onPress={() => chooseAction("Looking for", CAREER_STAGES.map((s) => ({ label: s.label, onPress: () => update("job_type", s.value) })))}
@@ -216,7 +217,7 @@ export default function Profile() {
                 >
                   <AppText style={styles.grow}>{lookingFor?.label}</AppText>
                   <SymbolView name="chevron.up.chevron.down" size={13} tintColor={colors.fgMuted} />
-                </Pressable>
+                </HapticPressable>
               </Field>
             </Section>
 
