@@ -182,7 +182,7 @@ function useNav() {
     applications: (params: { status?: AppStatus; view?: "board" }) => router.navigate({ pathname: "/applications", params }),
     calendar: () => router.navigate("/calendar"),
     event: (id: string) => router.push({ pathname: "/calendar/event", params: { id } }),
-    jobs: () => router.navigate("/jobs"),
+    jobs: () => router.navigate("/more/jobs"),
   };
 }
 

@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { TextInput } from "@/components/text";
 import { SymbolView } from "expo-symbols";
 import { AppText } from "@/components/ui";
 import { useTheme } from "@/theme/use-theme";
+import { HapticPressable } from "@/components/haptic-pressable";
 
 /** The website's TagEditor: chips you can remove, plus a field that adds one on return, comma or blur. */
 export function TagEditor({ tags, onChange, placeholder, label }: { tags: string[]; onChange: (tags: string[]) => void; placeholder: string; label: string }) {
@@ -21,9 +22,9 @@ export function TagEditor({ tags, onChange, placeholder, label }: { tags: string
       {tags.map((tag) => (
         <View key={tag} style={[styles.tag, { backgroundColor: colors.muted }]}>
           <AppText style={[styles.tagText, { color: colors.fg2 }]}>{tag}</AppText>
-          <Pressable accessibilityRole="button" accessibilityLabel={`Remove ${tag}`} onPress={() => onChange(tags.filter((t) => t !== tag))} hitSlop={8}>
+          <HapticPressable accessibilityRole="button" accessibilityLabel={`Remove ${tag}`} onPress={() => onChange(tags.filter((t) => t !== tag))} hitSlop={8}>
             <SymbolView name="xmark" size={10} weight="semibold" tintColor={colors.fgMuted} />
-          </Pressable>
+          </HapticPressable>
         </View>
       ))}
       <TextInput

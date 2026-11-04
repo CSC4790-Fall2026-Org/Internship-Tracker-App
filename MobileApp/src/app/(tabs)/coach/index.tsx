@@ -1,11 +1,11 @@
-import { useMemo, useRef, useState } from "react";
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View, type ScrollViewInstance } from "react-native";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Keyboard, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View, type ScrollViewInstance } from "react-native";
 import { TextInput } from "@/components/text";
-import { Stack, useRouter } from "expo-router";
+import { Stack } from "expo-router";
 import { useHeaderHeight } from "expo-router/react-navigation";
 import { SymbolView } from "expo-symbols";
 import * as Clipboard from "expo-clipboard";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useData } from "@shared/data/DataContext";
 import { askCoach, buildCoachContext, HISTORY_SENT, MAX_QUESTION_CHARS, STARTER_PROMPTS, type CoachMessage } from "@shared/data/coach";
 import { AppText, Banner, Button } from "@/components/ui";
@@ -14,25 +14,36 @@ import { RichText } from "@/components/rich-text";
 import { errorMessage, useToast } from "@/components/feedback";
 import { useCareerLog } from "@/data/career-log-store";
 import { useTheme } from "@/theme/use-theme";
+import { HapticPressable } from "@/components/haptic-pressable";
 
 /**
  * The website's Career Coach: a chat grounded in the user's own data, built into a summary by the shared coach.ts
- * and answered by the career-coach Edge Function. Opens as a sheet so the message bar isn't under the tab bar.
+ * and answered by the career-coach Edge Function. It has the middle tab.
  */
-export default function CareerCoach() {
+export default function CareerCoachTab() {
+  // The tab bar floats over the screen. A provider measured inside the tab counts it in the bottom inset,
+  // which keeps the message bar above it.
+  return (
+    <SafeAreaProvider>
+      <CareerCoach />
+    </SafeAreaProvider>
+  );
+}
+
+function CareerCoach() {
   const { applications, tasks, contacts, events } = useData();
   const careerLog = useCareerLog();
-  const router = useRouter();
   const toast = useToast();
   const { colors } = useTheme();
   const headerHeight = useHeaderHeight();
   const insets = useSafeAreaInsets();
-  // Chat history lives only on this screen for now; closing it starts a new chat, like leaving the page on the website.
+  // Chat history lives only in this tab for now, and is gone when the app closes, like leaving the page on the website.
   const [messages, setMessages] = useState<CoachMessage[]>([]);
   const [draft, setDraft] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<ScrollViewInstance>(null);
+  const keyboardShown = useKeyboardShown();
 
   // A log that couldn't be loaded goes in as null, so the coach says so instead of guessing.
   const logForCoach = careerLog.error ? null : careerLog.entries;
@@ -82,8 +93,7 @@ export default function CareerCoach() {
     <>
       <Stack.Screen
         options={{
-          headerLeft: () => (messages.length > 0 ? <HeaderButton label="New chat" onPress={newChat} disabled={pending} /> : null),
-          headerRight: () => <HeaderButton label="Done" bold onPress={() => router.back()} />,
+          headerRight: () => (messages.length > 0 ? <HeaderButton label="New chat" onPress={newChat} disabled={pending} /> : null),
         }}
       />
       <KeyboardAvoidingView style={[styles.flex, { backgroundColor: colors.canvas }]} behavior={Platform.OS === "ios" ? "padding" : undefined} keyboardVerticalOffset={headerHeight}>
@@ -107,7 +117,7 @@ export default function CareerCoach() {
               </AppText>
               <View style={styles.prompts}>
                 {STARTER_PROMPTS.map((prompt) => (
-                  <Pressable
+                  <HapticPressable
                     key={prompt}
                     accessibilityRole="button"
                     disabled={loadingData}
@@ -116,7 +126,7 @@ export default function CareerCoach() {
                   >
                     <AppText style={[styles.grow, { color: colors.fg2 }]}>{prompt}</AppText>
                     <SymbolView name="arrow.right" size={13} tintColor={colors.fgFaint} />
-                  </Pressable>
+                  </HapticPressable>
                 ))}
               </View>
             </View>
@@ -137,10 +147,10 @@ export default function CareerCoach() {
                     <CoachAvatar />
                     <View style={styles.grow}>
                       <RichText text={m.content} />
-                      <Pressable accessibilityRole="button" accessibilityLabel="Copy answer" onPress={() => copy(m.content)} hitSlop={8} style={styles.copy}>
+                      <HapticPressable accessibilityRole="button" accessibilityLabel="Copy answer" onPress={() => copy(m.content)} hitSlop={8} style={styles.copy}>
                         <SymbolView name="doc.on.doc" size={14} tintColor={colors.fgMuted} />
                         <AppText variant="small">Copy</AppText>
-                      </Pressable>
+                      </HapticPressable>
                     </View>
                   </View>
                 ),
@@ -156,7 +166,7 @@ export default function CareerCoach() {
           {error && <Banner action={lastIsUser ? <Button onPress={() => send(messages)}>Try again</Button> : undefined}>{error}</Banner>}
         </ScrollView>
 
-        <View style={[styles.composer, { borderTopColor: colors.line, backgroundColor: colors.subtle, paddingBottom: Math.max(insets.bottom, 12) }]}>
+        <View style={[styles.composer, { borderTopColor: colors.line, backgroundColor: colors.subtle, paddingBottom: keyboardShown ? 12 : Math.max(insets.bottom, 12) }]}>
           <View style={styles.inputRow}>
             <TextInput
               accessibilityLabel="Ask the career coach"
@@ -168,7 +178,7 @@ export default function CareerCoach() {
               placeholderTextColor={colors.fgFaint}
               style={[styles.input, { borderColor: colors.line, backgroundColor: colors.surface, color: colors.fg }]}
             />
-            <Pressable
+            <HapticPressable
               accessibilityRole="button"
               accessibilityLabel="Send"
               disabled={!draft.trim() || pending || loadingData}
@@ -176,7 +186,7 @@ export default function CareerCoach() {
               style={[styles.send, { backgroundColor: colors.ink, opacity: !draft.trim() || pending || loadingData ? 0.4 : 1 }]}
             >
               <SymbolView name="arrow.up" size={16} weight="bold" tintColor={colors.onInk} />
-            </Pressable>
+            </HapticPressable>
           </View>
           <AppText variant="small">
             {`Uses ${plural(counts.applications, "application")}, ${plural(counts.upcoming, "upcoming item")}, ${plural(counts.contacts, "contact")} and `}
@@ -187,6 +197,20 @@ export default function CareerCoach() {
       </KeyboardAvoidingView>
     </>
   );
+}
+
+/** While the keyboard is up it covers the tab bar, so the message bar can drop the room it keeps for it. */
+function useKeyboardShown() {
+  const [shown, setShown] = useState(false);
+  useEffect(() => {
+    const show = Keyboard.addListener("keyboardWillShow", () => setShown(true));
+    const hide = Keyboard.addListener("keyboardWillHide", () => setShown(false));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
+  return shown;
 }
 
 function plural(n: number, one: string, many = `${one}s`) {

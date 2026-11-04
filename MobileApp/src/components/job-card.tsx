@@ -1,4 +1,4 @@
-import { Pressable, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import * as WebBrowser from "expo-web-browser";
 import { SymbolView } from "expo-symbols";
 import type { Application } from "@shared/data/types";
@@ -8,6 +8,7 @@ import { STATUS } from "@shared/data/status";
 import { timeAgo } from "@shared/data/dates";
 import { AppText, Badge, Button, Card, CompanyLogo, StatusDot } from "@/components/ui";
 import { useTheme } from "@/theme/use-theme";
+import { HapticPressable } from "@/components/haptic-pressable";
 
 export const companyOf = (job: JobListing) => job.company || "Unknown company";
 
@@ -101,7 +102,7 @@ export function JobCard({ job, recommendation, tracked, askedAboutApplying, savi
           Apply
         </Button>
         {tracked ? (
-          <Pressable
+          <HapticPressable
             accessibilityRole="button"
             accessibilityLabel={`Tracked, ${STATUS[tracked.status].label}. Open in your tracker`}
             onPress={() => onOpenTracked(tracked.id)}
@@ -110,7 +111,7 @@ export function JobCard({ job, recommendation, tracked, askedAboutApplying, savi
             <SymbolView name="checkmark" size={13} weight="semibold" tintColor={colors.success} />
             <StatusDot status={tracked.status} />
             <AppText style={styles.bold}>{STATUS[tracked.status].label}</AppText>
-          </Pressable>
+          </HapticPressable>
         ) : (
           <Button onPress={() => onTrack("wishlist")} loading={saving} style={styles.grow} accessibilityHint="Adds it to your Wishlist to apply later">
             Save for later

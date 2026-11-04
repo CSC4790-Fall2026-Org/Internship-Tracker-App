@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { SymbolView } from "expo-symbols";
 import type { Task } from "@shared/data/types";
 import { useData } from "@shared/data/DataContext";
@@ -13,6 +13,7 @@ import { errorMessage, useToast } from "@/components/feedback";
 import { useTheme } from "@/theme/use-theme";
 import Animated, { LayoutAnimationConfig } from "react-native-reanimated";
 import { ROW_ENTER, ROW_EXIT, ROW_LAYOUT } from "@/theme/motion";
+import { HapticPressable } from "@/components/haptic-pressable";
 
 /** Dated tasks first (soonest first), then undated ones. Same order as the website. */
 function sortTasks(tasks: Task[]) {
@@ -81,10 +82,10 @@ export function TasksPanel() {
           </View>
         </View>
       ) : (
-        <Pressable accessibilityRole="button" onPress={() => setDraft({ text: "", due: "", applicationId: null })} style={({ pressed }) => [styles.addRow, pressed && { backgroundColor: colors.subtle }]}>
+        <HapticPressable accessibilityRole="button" onPress={() => setDraft({ text: "", due: "", applicationId: null })} style={({ pressed }) => [styles.addRow, pressed && { backgroundColor: colors.subtle }]}>
           <SymbolView name="plus" size={15} tintColor={colors.fgMuted} />
           <AppText variant="muted">Add task</AppText>
-        </Pressable>
+        </HapticPressable>
       )}
 
       {open.length === 0 ? (
@@ -101,12 +102,12 @@ export function TasksPanel() {
 
       {done.length > 0 && (
         <View style={[styles.doneSection, { borderTopColor: colors.line }]}>
-          <Pressable accessibilityRole="button" accessibilityState={{ expanded: showDone }} onPress={() => setShowDone((s) => !s)} style={styles.doneToggle} hitSlop={6}>
+          <HapticPressable accessibilityRole="button" accessibilityState={{ expanded: showDone }} feedback="select" onPress={() => setShowDone((s) => !s)} style={styles.doneToggle} hitSlop={6}>
             <SymbolView name={showDone ? "chevron.down" : "chevron.right"} size={12} tintColor={colors.fgMuted} />
             <AppText variant="small" style={styles.bold}>
               Completed ({done.length})
             </AppText>
-          </Pressable>
+          </HapticPressable>
           {showDone && done.map((task) => <TaskRow key={task.id} task={task} onToggle={() => toggle(task)} onDelete={() => remove(task)} />)}
         </View>
       )}

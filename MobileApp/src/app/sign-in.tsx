@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { supabase } from "@/lib/supabase";
 import { isGoogleEnabled, signInWithGoogle } from "@/lib/google-sign-in";
 import { AppText, Banner, Button, Field, Input, Screen } from "@/components/ui";
 import { useTheme } from "@/theme/use-theme";
+import { HapticPressable } from "@/components/haptic-pressable";
 
 // Same flow and wording as the website's Login page. On success, the root layout picks up the new
 // session through onAuthStateChange and switches to the tabs.
@@ -93,9 +94,9 @@ export default function SignIn() {
           <AppText variant="title">{signup ? "Create your account" : "Welcome back"}</AppText>
           <View style={styles.switchRow}>
             <AppText variant="muted">{signup ? "Already have an account? " : "New to Pipeline? "}</AppText>
-            <Pressable onPress={switchTab} accessibilityRole="button" hitSlop={8}>
+            <HapticPressable feedback="select" onPress={switchTab} accessibilityRole="button" hitSlop={8}>
               <AppText style={{ color: colors.accentFg, fontWeight: "600" }}>{signup ? "Sign in" : "Create an account"}</AppText>
-            </Pressable>
+            </HapticPressable>
           </View>
         </View>
 
@@ -136,9 +137,9 @@ export default function SignIn() {
           label="Password"
           accessory={
             !signup && (
-              <Pressable onPress={forgotPassword} accessibilityRole="button" hitSlop={8}>
+              <HapticPressable onPress={forgotPassword} accessibilityRole="button" hitSlop={8}>
                 <AppText variant="small">Forgot password?</AppText>
-              </Pressable>
+              </HapticPressable>
             )
           }
         >
@@ -155,7 +156,8 @@ export default function SignIn() {
               onSubmitEditing={submit}
               style={styles.passwordInput}
             />
-            <Pressable
+            <HapticPressable
+              feedback="toggle"
               onPress={() => setShowPassword((v) => !v)}
               accessibilityRole="button"
               accessibilityLabel={showPassword ? "Hide password" : "Show password"}
@@ -165,7 +167,7 @@ export default function SignIn() {
               <AppText variant="small" style={{ fontWeight: "600" }}>
                 {showPassword ? "Hide" : "Show"}
               </AppText>
-            </Pressable>
+            </HapticPressable>
           </View>
         </Field>
 

@@ -34,11 +34,11 @@ const PAGES: { label: string; href: Href; hint: string; icon: SFSymbol }[] = [
   { label: "Board", href: { pathname: "/applications", params: { view: "board" } }, hint: "Applications by stage, and insights", icon: "rectangle.split.3x1" },
   { label: "Applications", href: "/applications", hint: "Full sortable list, import and export", icon: "list.bullet.rectangle" },
   { label: "Calendar", href: "/calendar", hint: "Month and week views", icon: "calendar" },
-  { label: "Jobs", href: "/jobs", hint: "Matches from your resume and job search", icon: "briefcase" },
+  { label: "Jobs", href: "/more/jobs", hint: "Matches from your resume and job search", icon: "briefcase" },
   { label: "Networking", href: "/more/networking", hint: "Contacts and outreach", icon: "person.2" },
   { label: "Career log", href: "/more/career-log", hint: "Accomplishments, projects, feedback, skills, milestones", icon: "trophy" },
   { label: "Brag doc", href: "/more/brag-doc", hint: "Your wins grouped by period, ready to copy", icon: "doc.text" },
-  { label: "Career Coach", href: "/more/coach", hint: "AI advice grounded in your applications and career log", icon: "sparkles" },
+  { label: "Career Coach", href: "/coach", hint: "AI advice grounded in your applications and career log", icon: "sparkles" },
   { label: "Profile", href: "/more/profile", hint: "Resume and extracted profile", icon: "person.crop.circle" },
 ];
 

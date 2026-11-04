@@ -45,6 +45,8 @@ export default function ApplicationsScreen() {
   const [selecting, setSelecting] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [refreshing, setRefreshing] = useState(false);
+  // While a Board card is being dragged, the page holds still under it.
+  const [boardDragging, setBoardDragging] = useState(false);
 
   const setView = (v: ViewMode) => {
     lastView = v;
@@ -239,7 +241,7 @@ export default function ApplicationsScreen() {
           <ActivityIndicator />
         </View>
       ) : (
-        <Screen refreshing={refreshing} onRefresh={pullToRefresh}>
+        <Screen refreshing={refreshing} onRefresh={pullToRefresh} scrollEnabled={!boardDragging}>
           {error && <Banner action={<Button onPress={refresh}>Try again</Button>}>{`Couldn't load your applications: ${error}`}</Banner>}
 
           {applications.length > 0 && (
@@ -264,7 +266,7 @@ export default function ApplicationsScreen() {
               </EmptyState>
             </Card>
           ) : view === "board" ? (
-            <Board applications={applications} onOpen={open} onAdd={add} onMove={pickStatus} />
+            <Board applications={applications} onOpen={open} onAdd={add} onMoveTo={changeStatus} onMoveMenu={pickStatus} onDragChange={setBoardDragging} />
           ) : view === "insights" ? (
             <Insights applications={applications} />
           ) : (

@@ -1,7 +1,7 @@
 // Phone versions of the website's components/charts.tsx and SankeyDiagram.tsx: same data, same colors.
 // Hover becomes tap: tapping a week or a flow reads out its number, tapping again clears it.
 import { useState } from "react";
-import { Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { ScrollView, StyleSheet, View } from "react-native";
 import Svg, { G, Path, Rect, Text as SvgText } from "react-native-svg";
 import type { Application, AppStatus } from "@shared/data/types";
 import { STATUS, STATUS_ORDER } from "@shared/data/status";
@@ -10,6 +10,7 @@ import { AppText, StatusDot } from "@/components/ui";
 import { geistFamily } from "@/components/text";
 import { GrowBar } from "@/components/motion";
 import { useTheme } from "@/theme/use-theme";
+import { HapticPressable } from "@/components/haptic-pressable";
 
 // ---------- Stage breakdown (part-to-whole bar + a row per stage) ----------
 
@@ -32,7 +33,7 @@ export function StageBreakdown({ applications, onSelect, grow = false }: { appli
       </GrowBar>
       <View style={[styles.tiles, { borderColor: colors.line }]}>
         {rows.map((r, i) => (
-          <Pressable
+          <HapticPressable
             key={r.status}
             accessibilityRole="button"
             accessibilityLabel={`${STATUS[r.status].label}: ${r.count} of ${total}. Show these applications`}
@@ -48,7 +49,7 @@ export function StageBreakdown({ applications, onSelect, grow = false }: { appli
             <AppText variant="small" style={styles.tilePct}>
               {r.count > 0 ? `${pct(r.count)}%` : ""}
             </AppText>
-          </Pressable>
+          </HapticPressable>
         ))}
       </View>
     </View>
@@ -112,10 +113,11 @@ export function WeeklyColumns({ weeks, title }: { weeks: { label: string; count:
         </View>
         <View style={[styles.plot, { height: H, borderTopColor: colors.line, borderBottomColor: colors.lineStrong }]}>
           {weeks.map((w, i) => (
-            <Pressable
+            <HapticPressable
               key={w.label}
               accessibilityRole="button"
               accessibilityLabel={`Week of ${w.label}: ${w.count}`}
+              feedback="select"
               onPress={() => setSelected(selected === i ? null : i)}
               style={styles.column}
             >
@@ -130,7 +132,7 @@ export function WeeklyColumns({ weeks, title }: { weeks: { label: string; count:
                   opacity: selected !== null && selected !== i ? 0.45 : 1,
                 }}
               />
-            </Pressable>
+            </HapticPressable>
           ))}
         </View>
       </View>

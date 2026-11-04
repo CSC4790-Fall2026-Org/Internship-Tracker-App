@@ -56,16 +56,17 @@ export function ApplicationRow({
 }
 
 /** A Board card, like the website's: company, role, location, the date or pay, and interview progress. */
-export function BoardCard({ app, onPress, onLongPress }: { app: Application; onPress: () => void; onLongPress: () => void }) {
+export function BoardCard({ app, onPress, onMoveMenu }: { app: Application; onPress: () => void; onMoveMenu: () => void }) {
   const { colors, scheme, status: palette } = useTheme();
   const showDeadline = deadlineMatters(app);
   return (
     <PressableScale feel="soft"
       accessibilityRole="button"
       accessibilityLabel={`${app.company}, ${app.position}`}
-      accessibilityHint="Opens the application. Touch and hold to move it to another stage."
+      accessibilityHint="Opens the application. Touch and hold, then drag to another column to move it."
+      accessibilityActions={[{ name: "move", label: "Move to another stage" }]}
+      onAccessibilityAction={(e) => e.nativeEvent.actionName === "move" && onMoveMenu()}
       onPress={onPress}
-      onLongPress={onLongPress}
       style={({ pressed }) => [styles.card, shadow("xs", scheme), { backgroundColor: colors.surface, borderColor: colors.line, borderLeftColor: palette[app.status].mark, opacity: pressed ? 0.85 : 1 }]}
     >
       <View style={styles.cardTop}>

@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { Linking, Pressable, StyleSheet, View } from "react-native";
+import { Linking, StyleSheet, View } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import { SymbolView, type SFSymbol } from "expo-symbols";
@@ -15,6 +15,7 @@ import { HeaderMenu, type MenuEntry } from "@/components/native-menu";
 import { chooseAction, confirm, errorMessage, useToast } from "@/components/feedback";
 import { useChangeStatus } from "@/data/use-change-status";
 import { useTheme } from "@/theme/use-theme";
+import { HapticPressable } from "@/components/haptic-pressable";
 
 type Tab = "overview" | "interviews" | "contacts";
 
@@ -93,7 +94,7 @@ export default function ApplicationDetail() {
           </View>
         </View>
 
-        <Pressable
+        <HapticPressable
           accessibilityRole="button"
           accessibilityLabel={`Stage: ${STATUS[app.status].label}. Change stage`}
           onPress={() => pickStatus(app)}
@@ -104,7 +105,7 @@ export default function ApplicationDetail() {
           <View style={styles.grow} />
           <AppText variant="small">Change</AppText>
           <SymbolView name="chevron.up.chevron.down" size={13} tintColor={colors.fgMuted} />
-        </Pressable>
+        </HapticPressable>
 
         <StageTrack app={app} />
 
@@ -127,17 +128,17 @@ export default function ApplicationDetail() {
           </Fact>
           <Fact icon="link" label="Posting">
             {app.jobUrl ? (
-              <Pressable accessibilityRole="link" onPress={() => WebBrowser.openBrowserAsync(app.jobUrl)} hitSlop={6}>
+              <HapticPressable accessibilityRole="link" onPress={() => WebBrowser.openBrowserAsync(app.jobUrl)} hitSlop={6}>
                 <AppText numberOfLines={1} style={{ color: colors.accentFg, fontWeight: "500" }}>
                   {hostOf(app.jobUrl)}
                 </AppText>
-              </Pressable>
+              </HapticPressable>
             ) : (
-              <Pressable accessibilityRole="button" onPress={edit} hitSlop={6}>
+              <HapticPressable accessibilityRole="button" onPress={edit} hitSlop={6}>
                 <AppText variant="muted" style={styles.underline}>
                   Add link
                 </AppText>
-              </Pressable>
+              </HapticPressable>
             )}
           </Fact>
         </Card>
@@ -303,9 +304,9 @@ function Overview({ app }: { app: Application }) {
                   </View>
                 )}
                 {item.eventId ? (
-                  <Pressable accessibilityRole="button" accessibilityHint="Opens the event" onPress={() => router.push({ pathname: "/calendar/event", params: { id: item.eventId! } })} style={styles.grow}>
+                  <HapticPressable accessibilityRole="button" accessibilityHint="Opens the event" onPress={() => router.push({ pathname: "/calendar/event", params: { id: item.eventId! } })} style={styles.grow}>
                     <AppText numberOfLines={1}>{item.title}</AppText>
-                  </Pressable>
+                  </HapticPressable>
                 ) : (
                   <AppText numberOfLines={1} style={[styles.grow, item.task?.done && { color: colors.fgMuted, textDecorationLine: "line-through" }]}>
                     {item.title}
@@ -388,9 +389,10 @@ function Interviews({ app }: { app: Application }) {
             const overdue = !stage.completed && !!stage.date && stage.date < today;
             return (
               <View key={stage.id} style={styles.round}>
-                <Pressable
+                <HapticPressable
                   accessibilityRole="checkbox"
                   accessibilityState={{ checked: stage.completed }}
+                  feedback="toggle"
                   accessibilityLabel={stage.completed ? `Mark ${stage.name} as not done` : `Mark ${stage.name} as done`}
                   onPress={() => toggle(stage)}
                   hitSlop={6}
@@ -400,7 +402,7 @@ function Interviews({ app }: { app: Application }) {
                   ]}
                 >
                   {stage.completed ? <SymbolView name="checkmark" size={13} weight="bold" tintColor="#FFFFFF" /> : <AppText variant="small">{i + 1}</AppText>}
-                </Pressable>
+                </HapticPressable>
                 <View style={[styles.roundBody, { borderColor: colors.line }]}>
                   <View style={styles.roundTop}>
                     <AppText style={[styles.bold, styles.shrink]}>{stage.name}</AppText>
@@ -503,20 +505,20 @@ function Contacts({ app }: { app: Application }) {
             <View key={contact.id} style={[styles.contact, { borderColor: colors.line }]}>
               <Avatar name={contact.name} size={36} />
               <View style={styles.grow}>
-                <Pressable accessibilityRole="button" accessibilityHint="Opens their contact details" onPress={() => router.push({ pathname: "/more/contact", params: { id: contact.id } })} hitSlop={6}>
+                <HapticPressable accessibilityRole="button" accessibilityHint="Opens their contact details" onPress={() => router.push({ pathname: "/more/contact", params: { id: contact.id } })} hitSlop={6}>
                   <AppText style={[styles.bold, { color: colors.accentFg }]} numberOfLines={1}>
                     {contact.name}
                   </AppText>
-                </Pressable>
+                </HapticPressable>
                 <AppText variant="small" numberOfLines={1}>
                   {[contact.role, contact.company].filter(Boolean).join(" · ") || "No role recorded"}
                 </AppText>
                 {contact.email ? (
-                  <Pressable accessibilityRole="link" onPress={() => Linking.openURL(`mailto:${contact.email}`)} hitSlop={6}>
+                  <HapticPressable accessibilityRole="link" onPress={() => Linking.openURL(`mailto:${contact.email}`)} hitSlop={6}>
                     <AppText variant="small" numberOfLines={1} style={{ color: colors.accentFg }}>
                       {contact.email}
                     </AppText>
-                  </Pressable>
+                  </HapticPressable>
                 ) : null}
               </View>
               <HeaderButton
