@@ -19,6 +19,7 @@ import {
   IconSearch,
   IconSparkles,
   IconTaskSquare,
+  IconTrendingUp,
   IconTrophy,
   IconUsers,
   type IconComponent,
@@ -44,9 +45,10 @@ const GROUP_ORDER: ResultGroup[] = ["Actions", "Applications", "People", "Events
 
 const PAGES: { label: string; screen: string; hint: string; icon: IconComponent }[] = [
   { label: "Dashboard", screen: "dashboard", hint: "What needs attention, upcoming, pipeline", icon: IconDashboard },
-  { label: "Board", screen: "pipeline", hint: "Applications by stage, and insights", icon: IconBoard },
+  { label: "Board", screen: "pipeline", hint: "Applications by stage", icon: IconBoard },
   { label: "Applications", screen: "applications", hint: "Full sortable list, import and export", icon: IconList },
   { label: "Calendar", screen: "calendar", hint: "Month and week views", icon: IconCalendar },
+  { label: "Insights", screen: "insights", hint: "Response, interview and offer rates, and application flow", icon: IconTrendingUp },
   { label: "Jobs", screen: "jobs", hint: "Matches from your resume and job search", icon: IconBriefcase },
   { label: "Networking", screen: "networking", hint: "Contacts and outreach", icon: IconUsers },
   { label: "Career log", screen: "career-log", hint: "Accomplishments, projects, feedback, skills, milestones", icon: IconTrophy },

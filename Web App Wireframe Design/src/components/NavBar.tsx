@@ -22,6 +22,7 @@ import {
   IconSidebar,
   IconSparkles,
   IconSun,
+  IconTrendingUp,
   IconTrophy,
   IconUsers,
   IconX,
@@ -38,7 +39,7 @@ interface ShellProps {
   children: ReactNode;
 }
 
-type NavId = "dashboard" | "pipeline" | "applications" | "calendar" | "jobs" | "networking" | "career-log" | "brag-doc" | "coach" | "ai-coach";
+type NavId = "dashboard" | "pipeline" | "applications" | "calendar" | "insights" | "jobs" | "networking" | "career-log" | "brag-doc" | "coach" | "ai-coach";
 
 const NAV: { label: string; items: { id: NavId; label: string; icon: IconComponent }[] }[] = [
   {
@@ -48,6 +49,7 @@ const NAV: { label: string; items: { id: NavId; label: string; icon: IconCompone
       { id: "pipeline", label: "Board", icon: IconBoard },
       { id: "applications", label: "Applications", icon: IconList },
       { id: "calendar", label: "Calendar", icon: IconCalendar },
+      { id: "insights", label: "Insights", icon: IconTrendingUp },
     ],
   },
   {

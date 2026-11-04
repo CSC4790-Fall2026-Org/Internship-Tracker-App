@@ -8,6 +8,8 @@ const WEB_SRC = path.resolve(__dirname, "../Web App Wireframe Design/src");
 const MOBILE_SUPABASE = path.resolve(__dirname, "src/lib/supabase.ts");
 
 config.watchFolders = [WEB_SRC];
+// expo-sqlite's web build loads wa-sqlite.wasm, which Metro doesn't bundle unless it's an asset type.
+config.resolver.assetExts.push("wasm");
 
 config.resolver.resolveRequest = (context, moduleName, platform) => {
   if (context.originModulePath.startsWith(WEB_SRC)) {

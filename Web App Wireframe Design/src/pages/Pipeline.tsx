@@ -4,26 +4,17 @@ import type { Application, AppStatus } from "../data/types";
 import { useData } from "../data/DataContext";
 import { STATUS, STATUS_ORDER } from "../data/status";
 import { pipelineStats } from "../data/insights";
-import { Button, Card, CompanyLogo, cx, DueChip, EmptyState, IconButton, Page, PageHeader, Segmented, StatusDot, Ticker } from "../components/ui";
+import { Button, CompanyLogo, cx, DueChip, IconButton, Page, PageHeader, StatusDot, Ticker } from "../components/ui";
 import { prefersReducedMotion, useFlip } from "../lib/motion";
 import { useFeedback, errorMessage } from "../components/feedback";
-import { IconBoard, IconMapPin, IconPlus, IconTrendingUp } from "../components/icons";
-import SankeyDiagram from "../components/SankeyDiagram";
+import { IconMapPin, IconPlus } from "../components/icons";
 import Confetti from "../components/Confetti";
 
 interface PipelineProps {
   onNavigate: (screen: string, id?: string) => void;
 }
 
-// Kept outside the component so returning to the Board reopens the same view.
-let lastView: "board" | "insights" = "board";
-
 export default function Pipeline({ onNavigate }: PipelineProps) {
-  const [view, setViewState] = useState(lastView);
-  const setView = (v: typeof view) => {
-    lastView = v;
-    setViewState(v);
-  };
   const { applications, updateApplication } = useData();
   const { toast } = useFeedback();
   // The browser only exposes drag data on drop, so the card being dragged is tracked here.
@@ -52,7 +43,7 @@ export default function Pipeline({ onNavigate }: PipelineProps) {
     };
     scroller.addEventListener("touchmove", blockScroll, { passive: false });
     return () => scroller.removeEventListener("touchmove", blockScroll);
-  }, [view]);
+  }, []);
 
   useEffect(() => () => cancelTouchDrag.current?.(), []);
 
@@ -161,125 +152,88 @@ export default function Pipeline({ onNavigate }: PipelineProps) {
     <Page width="wide">
       <PageHeader
         title="Board"
-        description={applications.length === 0 ? "Your applications by stage." : `${stats.total} tracked · ${stats.active} in progress${view === "board" ? (coarsePointer ? " · Press and hold a card to move it" : " · Drag a card to change its stage") : ""}`}
+        description={applications.length === 0 ? "Your applications by stage." : `${stats.total} tracked · ${stats.active} in progress · ${coarsePointer ? "Press and hold a card to move it" : "Drag a card to change its stage"}`}
         actions={
-          <>
-            <Segmented
-              label="View"
-              value={view}
-              onChange={setView}
-              options={[
-                { value: "board", label: "Board", icon: IconBoard },
-                { value: "insights", label: "Insights", icon: IconTrendingUp },
-              ]}
-            />
-            <Button variant="primary" icon={IconPlus} onClick={() => onNavigate("add")}>
-              Add application
-            </Button>
-          </>
+          <Button variant="primary" icon={IconPlus} onClick={() => onNavigate("add")}>
+            Add application
+          </Button>
         }
       />
 
-      {view === "board" && (
-        <div ref={scrollerRef} className="-mx-4 overflow-x-auto px-4 pb-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
-          <div ref={boardRef} className="grid min-w-[1120px] auto-cols-[minmax(0,1fr)] grid-flow-col gap-2.5">
-            {STATUS_ORDER.map((status) => {
-              const cards = byStatus[status];
-              const dragSource = applications.find((a) => a.id === draggingId);
-              const isDropTarget = overColumn === status && !!dragSource && dragSource.status !== status;
-              return (
-                <section
-                  key={status}
-                  data-column={status}
-                  aria-label={`${STATUS[status].label}, ${cards.length}`}
-                  // The whole column accepts drops, not just the cards, so empty columns work too.
-                  onDragOver={(e) => {
-                    if (!draggingId) return; // ignore files or text dragged in from elsewhere
-                    e.preventDefault();
-                    e.dataTransfer.dropEffect = "move";
-                    if (overColumn !== status) setOverColumn(status);
-                  }}
-                  onDragLeave={(e) => {
-                    // dragleave also fires when moving onto a child element; only clear when truly leaving.
-                    if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOverColumn((c) => (c === status ? null : c));
-                  }}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    const id = draggingId ?? e.dataTransfer.getData("text/plain");
-                    setOverColumn(null);
-                    setDraggingId(null);
-                    if (id) dropStart.current.set(id, { left: e.clientX - grabOffset.current.x, top: e.clientY - grabOffset.current.y });
-                    if (id) moveTo(id, status, { x: e.clientX, y: e.clientY });
-                  }}
-                  className={cx(
-                    "flex min-h-[calc(100dvh-220px)] flex-col rounded-card border p-1.5 transition-[background-color,border-color,box-shadow] duration-150",
-                    // Each column wears its stage color, and lights up fully while a card hovers over it.
-                    isDropTarget ? STATUS[status].drop : cx("border-transparent", STATUS[status].column),
+      <div ref={scrollerRef} className="-mx-4 overflow-x-auto px-4 pb-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+        <div ref={boardRef} className="grid min-w-[1120px] auto-cols-[minmax(0,1fr)] grid-flow-col gap-2.5">
+          {STATUS_ORDER.map((status) => {
+            const cards = byStatus[status];
+            const dragSource = applications.find((a) => a.id === draggingId);
+            const isDropTarget = overColumn === status && !!dragSource && dragSource.status !== status;
+            return (
+              <section
+                key={status}
+                data-column={status}
+                aria-label={`${STATUS[status].label}, ${cards.length}`}
+                // The whole column accepts drops, not just the cards, so empty columns work too.
+                onDragOver={(e) => {
+                  if (!draggingId) return; // ignore files or text dragged in from elsewhere
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = "move";
+                  if (overColumn !== status) setOverColumn(status);
+                }}
+                onDragLeave={(e) => {
+                  // dragleave also fires when moving onto a child element; only clear when truly leaving.
+                  if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOverColumn((c) => (c === status ? null : c));
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  const id = draggingId ?? e.dataTransfer.getData("text/plain");
+                  setOverColumn(null);
+                  setDraggingId(null);
+                  if (id) dropStart.current.set(id, { left: e.clientX - grabOffset.current.x, top: e.clientY - grabOffset.current.y });
+                  if (id) moveTo(id, status, { x: e.clientX, y: e.clientY });
+                }}
+                className={cx(
+                  "flex min-h-[calc(100dvh-220px)] flex-col rounded-card border p-1.5 transition-[background-color,border-color,box-shadow] duration-150",
+                  // Each column wears its stage color, and lights up fully while a card hovers over it.
+                  isDropTarget ? STATUS[status].drop : cx("border-transparent", STATUS[status].column),
+                )}
+              >
+                <header className="flex h-9 items-center gap-2 pr-0.5 pl-2">
+                  <StatusDot status={status} />
+                  <h2 className="text-ui font-semibold text-fg">{STATUS[status].label}</h2>
+                  <span className={cx("min-w-5 rounded-full px-1.5 text-center text-2xs font-semibold", STATUS[status].badge)}>
+                    <Ticker value={cards.length} />
+                  </span>
+                  <IconButton icon={IconPlus} size="sm" label={`Add to ${STATUS[status].label}`} onClick={() => onNavigate("add", status)} className="ml-auto" />
+                </header>
+                <div className="flex flex-1 flex-col gap-1.5">
+                  {cards.map((app) => (
+                    <KanbanCard
+                      key={app.id}
+                      app={app}
+                      edge={STATUS[status].edge}
+                      onOpen={() => onNavigate("detail", app.id)}
+                      isDragging={draggingId === app.id}
+                      onDragStart={(offset) => {
+                        grabOffset.current = offset;
+                        setDraggingId(app.id);
+                      }}
+                      onDragEnd={() => {
+                        setDraggingId(null);
+                        setOverColumn(null);
+                      }}
+                      onTouchPickUp={(point, rect) => startTouchDrag(app, point, rect)}
+                    />
+                  ))}
+                  {cards.length === 0 && (
+                    <div className={cx("flex flex-1 items-start justify-center rounded-lg border border-dashed px-3 pt-8 text-center text-xs", isDropTarget ? cx("border-current font-medium", STATUS[status].badge.split(" ")[1]) : "border-line-strong/70 text-fg-muted")}>
+                      {draggingId ? `Drop to move to ${STATUS[status].label}` : STATUS[status].hint}
+                    </div>
                   )}
-                >
-                  <header className="flex h-9 items-center gap-2 pr-0.5 pl-2">
-                    <StatusDot status={status} />
-                    <h2 className="text-ui font-semibold text-fg">{STATUS[status].label}</h2>
-                    <span className={cx("min-w-5 rounded-full px-1.5 text-center text-2xs font-semibold", STATUS[status].badge)}>
-                      <Ticker value={cards.length} />
-                    </span>
-                    <IconButton icon={IconPlus} size="sm" label={`Add to ${STATUS[status].label}`} onClick={() => onNavigate("add", status)} className="ml-auto" />
-                  </header>
-                  <div className="flex flex-1 flex-col gap-1.5">
-                    {cards.map((app) => (
-                      <KanbanCard
-                        key={app.id}
-                        app={app}
-                        edge={STATUS[status].edge}
-                        onOpen={() => onNavigate("detail", app.id)}
-                        isDragging={draggingId === app.id}
-                        onDragStart={(offset) => {
-                          grabOffset.current = offset;
-                          setDraggingId(app.id);
-                        }}
-                        onDragEnd={() => {
-                          setDraggingId(null);
-                          setOverColumn(null);
-                        }}
-                        onTouchPickUp={(point, rect) => startTouchDrag(app, point, rect)}
-                      />
-                    ))}
-                    {cards.length === 0 && (
-                      <div className={cx("flex flex-1 items-start justify-center rounded-lg border border-dashed px-3 pt-8 text-center text-xs", isDropTarget ? cx("border-current font-medium", STATUS[status].badge.split(" ")[1]) : "border-line-strong/70 text-fg-muted")}>
-                        {draggingId ? `Drop to move to ${STATUS[status].label}` : STATUS[status].hint}
-                      </div>
-                    )}
-                  </div>
-                </section>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {view === "insights" &&
-        (stats.total === 0 ? (
-          <Card>
-            <EmptyState icon={IconTrendingUp} title="No insights yet" description="Add a few applications and this view will show how they flow from submitted to offer." />
-          </Card>
-        ) : (
-          <div className="space-y-5">
-            <div className="grid gap-px overflow-hidden rounded-card border border-line bg-line sm:grid-cols-3">
-              {[
-                { label: "Response rate", value: stats.responseRate, detail: `${stats.heardBack} of ${stats.submitted} submitted heard back` },
-                { label: "Interview rate", value: stats.interviewRate, detail: `${stats.interviewed} of ${stats.submitted} submitted reached an interview` },
-                { label: "Offer rate", value: stats.offerRate, detail: `${stats.offers} of ${stats.interviewed} interviewed received an offer` },
-              ].map((s) => (
-                <div key={s.label} className="bg-surface px-4 py-3.5">
-                  <p className="text-ui text-fg-muted">{s.label}</p>
-                  <p className="mt-1.5 text-2xl font-semibold tracking-[-0.02em] text-fg">{s.value === null ? "—" : `${s.value}%`}</p>
-                  <p className="mt-0.5 text-xs text-fg-muted">{s.detail}</p>
                 </div>
-              ))}
-            </div>
-            <SankeyDiagram applications={applications} />
-          </div>
-        ))}
+              </section>
+            );
+          })}
+        </div>
+      </div>
 
       {/* Respect the OS setting for people who find motion uncomfortable; they still get the message. */}
       {celebration && !prefersReducedMotion() && <Confetti key={celebration.id} x={celebration.x} y={celebration.y} />}

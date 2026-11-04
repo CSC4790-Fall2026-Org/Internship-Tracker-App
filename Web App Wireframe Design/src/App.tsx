@@ -10,6 +10,7 @@ import { IconAlertCircle, IconRefresh } from "./components/icons";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Pipeline from "./pages/Pipeline";
+import Insights from "./pages/Insights";
 import ApplicationsTable from "./pages/ApplicationsTable";
 import ApplicationDetail from "./pages/ApplicationDetail";
 import ApplicationFormModal from "./pages/AddApplication";
@@ -24,7 +25,7 @@ import CareerCoach from "./pages/CareerCoach";
 import Onboarding from "./pages/Onboarding";
 import { fetchResumeProfile } from "./data/resume";
 
-type Screen = "dashboard" | "pipeline" | "applications" | "detail" | "calendar" | "networking" | "jobs" | "career-log" | "brag-doc" | "coach" | "ai-coach";
+type Screen = "dashboard" | "pipeline" | "applications" | "detail" | "calendar" | "insights" | "networking" | "jobs" | "career-log" | "brag-doc" | "coach" | "ai-coach";
 
 interface Route {
   screen: Screen;
@@ -38,6 +39,7 @@ const TITLES: Record<Screen, string> = {
   applications: "Applications",
   detail: "Application",
   calendar: "Calendar",
+  insights: "Insights",
   networking: "Networking",
   jobs: "Jobs",
   "career-log": "Career log",
@@ -46,7 +48,7 @@ const TITLES: Record<Screen, string> = {
   "ai-coach": "Profile",
 };
 
-const SEGMENT: Partial<Record<Screen, string>> = { pipeline: "board", calendar: "calendar", networking: "networking", jobs: "jobs", "career-log": "career-log", "brag-doc": "brag-doc", coach: "coach", "ai-coach": "profile" };
+const SEGMENT: Partial<Record<Screen, string>> = { pipeline: "board", calendar: "calendar", insights: "insights", networking: "networking", jobs: "jobs", "career-log": "career-log", "brag-doc": "brag-doc", coach: "coach", "ai-coach": "profile" };
 
 // Screens live in the URL hash so the back button, refresh and shared links keep your place.
 // The hash is only read and written once signed in, after Supabase has consumed any auth tokens in the URL.
@@ -233,6 +235,7 @@ function AuthedApp({ session }: { session: Session }) {
         <>
           {screen === "dashboard" && <Dashboard onNavigate={navigate} userName={displayName(session)} />}
           {screen === "pipeline" && <Pipeline onNavigate={navigate} />}
+          {screen === "insights" && <Insights onNavigate={navigate} />}
           {screen === "applications" && <ApplicationsTable key={id} onNavigate={navigate} initialStatus={id} />}
           {screen === "detail" && <ApplicationDetail key={id} appId={id} onNavigate={navigate} />}
           {screen === "jobs" && <Jobs onNavigate={navigate} />}
