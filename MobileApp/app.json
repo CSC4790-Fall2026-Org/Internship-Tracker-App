@@ -7,12 +7,9 @@
     "icon": "./assets/images/icon.png",
     "scheme": "pipeline",
     "userInterfaceStyle": "automatic",
-    "ios": {
-      "icon": "./assets/expo.icon"
-    },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#123A5C",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
@@ -30,7 +27,7 @@
         {
           "backgroundColor": "#F7F7F8",
           "image": "./assets/images/splash-icon.png",
-          "imageWidth": 76,
+          "imageWidth": 100,
           "dark": {
             "backgroundColor": "#0E0E10",
             "image": "./assets/images/splash-icon.png"

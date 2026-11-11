@@ -158,7 +158,7 @@ Each phase ends with something that runs on a phone. Tick the boxes in PR descri
 
 ### Phase 7: App Store
 - [ ] Apple Developer Program membership ($99/year) for TestFlight and the App Store. Expo Go testing is free until then.
-- [ ] App icon, splash screen, app name and bundle ID.
+- [ ] App icon, splash screen, app name and bundle ID. (The icon and splash are done, see UI_POLISH_PLAN.md step 6. The bundle ID is still to do.)
 - [ ] **Delete account in the app.** Apple requires this for apps that let people create accounts, and the website doesn't have it yet. It needs a new edge function that deletes the signed-in user with the service role. All 10 tables already delete that user's rows along with the account, but the function must also delete their uploaded resumes from storage. Add the same option to the website.
 - [ ] **Sign in with Apple.** Apple's guidelines generally require an equivalent privacy-friendly option when an app offers Google sign-in. Supabase supports Apple as a provider. Check the current guidelines before submitting.
 - [ ] Privacy policy URL and the App Store privacy questionnaire (the app stores emails, resumes and application data).
