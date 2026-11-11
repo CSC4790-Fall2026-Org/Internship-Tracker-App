@@ -122,7 +122,7 @@ All of this uses Reanimated, already installed, so it runs on the UI thread and 
 - **Sign-in screen:** bring over the website's dark brand panel (the Pipeline mark, "Your whole job search, organized.", and the four feature lines), with the form below it.
 
 ### 6. Brand assets (small effort, required before TestFlight)
-- **App icon and splash:** both still use Expo's defaults, which is the first thing a tester sees. Make them from the Pipeline mark, with light and dark variants. This overlaps DEVELOPMENT_PLAN.md Phase 7.
+- **App icon and splash:** **Done (Nov 4)** with the user's own icon: a teal-to-blue pipe-shaped P on dark navy. The mockup was rebuilt into a full-bleed square, then exported as the iOS icon, the Android layers, the splash, the favicon and the brand mark on sign-in and onboarding. The website uses it too, as its favicon, Home Screen icon and sidebar and login BrandMark. Not done: a separate dark or tinted iOS 26 variant. The old Icon Composer file (`assets/expo.icon`) was removed, so iOS uses `icon.png`.
 
 ## Research on Mobbin
 

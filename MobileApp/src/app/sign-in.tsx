@@ -1,10 +1,13 @@
 import { useEffect, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { Image, StyleSheet, View } from "react-native";
 import { supabase } from "@/lib/supabase";
 import { isGoogleEnabled, signInWithGoogle } from "@/lib/google-sign-in";
 import { AppText, Banner, Button, Field, Input, Screen } from "@/components/ui";
 import { useTheme } from "@/theme/use-theme";
 import { HapticPressable } from "@/components/haptic-pressable";
+
+// The app icon, as the brand mark beside "Pipeline".
+const LOGO = require("../../assets/images/logo.png");
 
 // Same flow and wording as the website's Login page. On success, the root layout picks up the new
 // session through onAuthStateChange and switches to the tabs.
@@ -86,7 +89,7 @@ export default function SignIn() {
   return (
     <Screen>
         <View style={styles.brand}>
-          <View style={[styles.mark, { backgroundColor: colors.accent }]} />
+          <Image source={LOGO} style={styles.mark} accessibilityIgnoresInvertColors />
           <AppText variant="heading">Pipeline</AppText>
         </View>
 
@@ -189,7 +192,7 @@ export default function SignIn() {
 
 const styles = StyleSheet.create({
   brand: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 24 },
-  mark: { width: 28, height: 28, borderCurve: "continuous", borderRadius: 8 },
+  mark: { width: 28, height: 28 },
   intro: { gap: 6, marginTop: 16, marginBottom: 8 },
   switchRow: { flexDirection: "row", flexWrap: "wrap", alignItems: "center" },
   passwordInput: { paddingRight: 64 },

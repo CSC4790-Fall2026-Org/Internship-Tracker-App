@@ -5,6 +5,7 @@ import { attentionItems } from "../data/insights";
 import { Avatar, cx, IconButton, Kbd, Ticker } from "./ui";
 import { Menu, useDialogBehavior } from "./overlay";
 import { useTheme } from "../lib/theme";
+import appIcon from "../assets/pipeline-icon.png";
 import {
   IconBoard,
   IconBriefcase,
@@ -63,17 +64,9 @@ const NAV: { label: string; items: { id: NavId; label: string; icon: IconCompone
   },
 ];
 
+/** The app icon, the same one as the favicon and the mobile app's. */
 export function BrandMark({ size = 24, className }: { size?: number; className?: string }) {
-  return (
-    <span className={cx("inline-flex shrink-0 items-center justify-center rounded-[7px] bg-accent text-white", className)} style={{ width: size, height: size }} aria-hidden="true">
-      <svg width={size * 0.62} height={size * 0.62} viewBox="0 0 15 15" fill="none">
-        <circle cx="2.5" cy="7.5" r="2" fill="currentColor" />
-        <circle cx="7.5" cy="7.5" r="2" fill="currentColor" fillOpacity="0.72" />
-        <circle cx="12.5" cy="7.5" r="2" fill="currentColor" fillOpacity="0.45" />
-        <path d="M4.5 7.5h1M9.5 7.5h1" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-      </svg>
-    </span>
-  );
+  return <img src={appIcon} width={size} height={size} alt="" aria-hidden="true" draggable={false} className={cx("shrink-0 select-none", className)} />;
 }
 
 const COLLAPSE_KEY = "pipeline.sidebar.collapsed";
