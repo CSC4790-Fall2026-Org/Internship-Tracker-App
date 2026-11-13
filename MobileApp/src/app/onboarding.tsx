@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ActivityIndicator, StyleSheet, View } from "react-native";
+import { ActivityIndicator, Image, StyleSheet, View } from "react-native";
 import { SymbolView } from "expo-symbols";
 import { saveOnboardingPreferences, type ResumeProfile, type UploadStage } from "@shared/data/resume";
 import { CAREER_FIELDS, CAREER_STAGES, MAX_CAREER_FIELDS, type CareerField, type JobType } from "@shared/data/jobs";
@@ -8,6 +8,9 @@ import { pickResume, uploadAndParseResume } from "@/data/resume-upload";
 import { markOnboarded } from "@/lib/onboarding";
 import { displayName, useSession } from "@/lib/session";
 import { useTheme } from "@/theme/use-theme";
+
+// The app icon, as the brand mark beside "Pipeline".
+const LOGO = require("../../assets/images/logo.png");
 
 // The website's Onboarding page: what you're looking for, your fields, then an optional resume.
 // Finishing sets `onboarded` on the user; the root layout sees the updated session and opens the tabs.
@@ -49,8 +52,7 @@ export default function Onboarding() {
 }
 
 function BrandMark() {
-  const { colors } = useTheme();
-  return <View style={[styles.mark, { backgroundColor: colors.accent }]} />;
+  return <Image source={LOGO} style={styles.mark} accessibilityIgnoresInvertColors />;
 }
 
 function StepLabel({ children }: { children: string }) {
@@ -268,7 +270,7 @@ function ProfileConfirmation({ profile, finishing, onFinish, onRetry }: { profil
 
 const styles = StyleSheet.create({
   brand: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, marginTop: 8 },
-  mark: { width: 26, height: 26, borderCurve: "continuous", borderRadius: 7 },
+  mark: { width: 26, height: 26 },
   card: { padding: 20, gap: 16 },
   header: { gap: 6 },
   stepLabel: { fontSize: 14, fontWeight: "500" },
