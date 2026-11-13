@@ -14,7 +14,9 @@ if (!url || !key) {
 
 export const supabase = createClient<Database>(url, key, {
   auth: {
-    storage: localStorage,
+    // On iOS/Android, expo-sqlite installs localStorage above. On web the browser provides it, but the
+    // static web build also renders pages in Node, which has none; supabase-js then keeps the session in memory.
+    storage: typeof localStorage !== "undefined" ? localStorage : undefined,
     autoRefreshToken: true,
     persistSession: true,
     // Phones have no URL for a session to arrive in.
